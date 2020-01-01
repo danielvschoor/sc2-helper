@@ -1,0 +1,3 @@
+[submodule "sc2-techtree"]
+	path = sc2-techtree
+	url = https://github.com/BurnySc2/sc2-techtree.git
