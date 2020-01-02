@@ -7,6 +7,7 @@ from data_caching import DataCache
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.unit import Unit
 from sc2.data import Attribute
+import time as Time
 
 class SurroundInfo:
     def __init__(self, max_attackers_per_defender, max_melee_attackers):
@@ -32,16 +33,23 @@ class CombatSettings:
         self.start_time = 0
 
 class CombatPredictor:
-    def __init__(self, units1, units2):
-        self.units1 = units1
-        self.units2 = units2
-        self.data_cache = DataCache()
+    def __init__(self, units1=None, units2=None, bot_object=None):
+        self.units1 = None
+        self.units2 = None
+        if units1 and units2:
+            self.units1 = units1
+            self.units2 = units2
+        if bot_object:
+            self.data_cache = DataCache(bot_object=bot_object)
+        else:
+            self.data_cache =DataCache()
         self.tech_tree = TechTree()
         
     def init(self):
         pass
     
     def predict_engage(self, settings=None, recording=None, defender_player=1):
+        start_time = Time.time()
         if not settings:
             settings = CombatSettings()
         # dc = DataCache()
@@ -135,18 +143,18 @@ class CombatPredictor:
 
                 for group in range(2):
                     guardian_shielded_area = 0
-                    g = self.units1 if group == 0 else self.units2
+                    # g = self.units1 if group == 0 else self.units2
 
-                    for i, u in enumerate(g):
-                        if u.type == UnitTypeId.SENTRY and u.buff_timer > 0:
-                            g[i].buff_timer -= dt
-                            guardian_shielded_area += guardian_shield_units
-                    total_area = 0
+                    # for i, u in enumerate(g):
+                    #     if u.type == UnitTypeId.SENTRY and u.buff_timer > 0:
+                    #         g[i].buff_timer -= dt
+                    #         guardian_shielded_area += guardian_shield_units
+                    # total_area = 0
 
-                    for i in g:
-                        # unit_data = self.data_cache.get_unit_data(i.type)
-                        r = i.data.unit_radius
-                        total_area += r*r*math.pi
+                    # for i in g:
+                    #     # unit_data = self.data_cache.get_unit_data(i.type)
+                    #     r = i.data.unit_radius
+                    #     total_area += r*r*math.pi
                     
                     guardian_shield_covers_all_units[group] = guardian_shielded_area > total_area
                     guardian_shield_unit_fraction[group] = min(0.8, guardian_shielded_area / (0.001+ total_area))
@@ -154,6 +162,8 @@ class CombatPredictor:
                 for group in range(2):
                     g1 = self.units1 if group == 0 else self.units2 
                     g2 = self.units2 if group == 0 else self.units1
+                    list_len1 = len(g1)
+                    list_len2 =  len(g2)
                     surround = surround_info1 if group ==0 else surround_info2
                     max_extra_melee_distance = math.sqrt(ground_area1/math.pi) * math.pi + math.sqrt(ground_area2/math.pi)*math.pi
 
@@ -168,16 +178,16 @@ class CombatPredictor:
                             opponent_fraction_melee_units +=1
                     
                     if len(g2) > 0:
-                        opponent_fraction_melee_units /= len(g2)
+                        opponent_fraction_melee_units /= list_len2
                     
-                    has_been_healed = [False for _ in range(len(g1))]
-                    melee_unit_attack_count = [0 for _ in range(len(g2))]
+                    has_been_healed = [False for _ in range(list_len1)]
+                    melee_unit_attack_count = [0 for _ in range(list_len2)]
 
                     if debug:
                         print("Max melee attackers: " , surround.max_melee_attackers , " " , surround.max_attackers_per_defender , " num units: " , len(g1))
 
                     for x, unit in enumerate(g1):
-                        list_len = len(g1)
+                        # list_len = len(g1)
                         # unit = g1[x]
                         
                         if unit.health ==0:
@@ -193,9 +203,9 @@ class CombatPredictor:
                         
                         if unit.type == UnitTypeId.MEDIVAC:
                             if unit.energy > 0:
-                                offset = int(random.randint(0,list_len))
-                                for j in range(list_len):
-                                    index = int((j + offset) % list_len)
+                                offset = int(random.randint(0,list_len1))
+                                for j in range(list_len1):
+                                    index = int((j + offset) % list_len1)
                                     other = g1[index]
                                     # other_data = self.data_cache.get_unit_data(other.type)
                                     if index != x and other.health > 0 and other.health < other.health_max and Attribute.Biological in other.data._attributes: ## TODO: Check if this actually works
@@ -207,11 +217,11 @@ class CombatPredictor:
                         
                         if unit.type == UnitTypeId.SHIELDBATTERY:
                             if unit.energy > 0:
-                                offset = int(random.randint(0,list_len))
+                                offset = int(random.randint(0,list_len1))
                                 SHIELDS_PER_NORMAL_SPEED_SECOND = 50.4 / 1.4
                                 ENERGY_USE_PER_SHIELD = 1.0 / 3.0
-                                for j in range(list_len):
-                                    index = int((j + offset) % list_len)
+                                for j in range(list_len1):
+                                    index = int((j + offset) % list_len1)
                                     other = g1[index]
                                     if index != x and not has_been_healed[index] and other.health > 0 and other.shield < other.shield_max:
                                         delta = min(min(other.shield_max - other.shield, SHIELDS_PER_NORMAL_SPEED_SECOND*dt), unit.energy/ENERGY_USE_PER_SHIELD)
@@ -263,7 +273,7 @@ class CombatPredictor:
                             if group +1 != defender_player:
                                 distance_to_enemy = max_range_defender
                                 if is_unit_melee:
-                                    distance_to_enemy += max_extra_melee_distance * (x / float(list_len))
+                                    distance_to_enemy += max_extra_melee_distance * (x / float(list_len1))
                                 
                                 time_to_reach_enemy = time_to_be_able_to_attack(unit.data, distance_to_enemy)
 
@@ -400,9 +410,9 @@ class CombatPredictor:
         average_health_by_time[1] /= max(0.01, average_health_by_time_weight[1])
 
         result.average_health_time = average_health_by_time;
-
+        end = Time.time()
+        print('Total time: ',end-start_time)
         return result
-    
 
     def owner_with_best_outcome(self):
         player1 = 0
@@ -552,12 +562,12 @@ class CombatUnit(Unit):
             self._owner = self.owner_id
             self._type = self.type_id
             self._buff_timer = 0
-            self._health_max = self.health_max
-            self._health = self.health
-            self._shield_max = self.shield_max 
-            self._shield = self.shield
-            self._energy = self.energy
-            self._is_flying = self.is_flying
+            self._health_max = self._proto.health_max
+            self._health = self._proto.health
+            self._shield_max = self._proto.shield_max 
+            self._shield = self._proto.shield
+            self._energy = self._proto.energy
+            self._is_flying = self._proto.is_flying
             
         elif owner is not None and type and health and flying is not None:
             self._owner = owner
@@ -582,6 +592,7 @@ class CombatUnit(Unit):
             self._buff_timer = 0
         
         # self._data = self.data_cache.get_unit_data(self._type)
+    
     @property
     def data(self):
         if not self._data:

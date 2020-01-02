@@ -1,0 +1,16 @@
+[package]
+name = "sc2_helper"
+version = "0.1.0"
+authors = []
+edition = "2018"
+
+[lib]
+name = "sc2_helper"
+crate-type = ["cdylib"]
+
+[dependencies]
+cute = "0.3.0"
+
+[dependencies.pyo3]
+version = "0.8.2"
+features = ["extension-module"]
