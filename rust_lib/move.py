@@ -10,5 +10,5 @@ if r ==0:
     file = sys.argv[2]
     if os.path.isfile(file):
         os.remove(file)
-    shutil.copy("rust_lib/target/release/sc2_helper.dll", file)
+    shutil.copy("target/release/sc2_helper.dll", file)
     print("File Moved")

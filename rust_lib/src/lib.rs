@@ -1,5 +1,6 @@
 mod combat_predictor;
 mod combat_unit;
+mod generated_enums;
 use pyo3::prelude::*;
 
 #[pymodule]
