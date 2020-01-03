@@ -9,13 +9,38 @@
 # from simulator_python import CombatPredictor, CombatUnit
 import time
 
-from sc2_helper import CombatUnits, CombatPredictor, CombatUnit
+from sc2_helper import CombatUnit, CombatPredictor, CombatUnits
 
 # cu = CombatUnits()
 # cu.add_multiple([(1,2,100.0,False)])
+#
+# class CombatUnit:
+#
+#     def __init__(self):
+#         self.owner = 1
+#         self.unit_type=64
+#         self.health = 100
+#         self.health_max = 100
+#         self.shield = 100
+#         self.shield_max = 100
+#         self.energy = 100
+#         self.is_flying = False
+#         self.buff_timer = 0
+#
+#     def to_rust(self):
+#         RUST_FIELDS= {'owner','unit_type','health','health_max','shield','shield_max','energy','is_flying','buff_timer'}
+#         return {key: value for key, value in self.__dict__.items() if key in RUST_FIELDS}
+
 start_time = time.time()
-cus = [CombatUnit(1,2,100.0,False) for _ in range(1000)]
-cus2 = [CombatUnit(1,2,100.0,False) for _ in range(1000)]
+cu = CombatUnit(_owner=1, _unit_type=64, _health=100.0, _shield=1200.0, _flying=False)
+print(cu.show_unit_type())
+
+# start_time = time.time()
+cus = [cu for _ in range(50)]
+cus2 = [cu for _ in range(50)]
+end_time = time.time()
+print(end_time-start_time)
+start_time = time.time()
 cp = CombatPredictor(CombatUnits(cus), CombatUnits(cus2))
 winner = cp.predict_engage()
 end_time = time.time()

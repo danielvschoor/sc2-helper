@@ -3,7 +3,9 @@ use crate::combat_unit::{CombatUnits, CombatUnit};
 
 #[pyclass]
 pub struct CombatPredictor{
+    #[pyo3(get)]
     units1: CombatUnits,
+    #[pyo3(get)]
     units2: CombatUnits ,
     // data: Vec<UnitTypeData>
 }
@@ -20,14 +22,14 @@ impl CombatPredictor{
             })
      }
 
-    #[getter]
-    fn get_units1(&self) -> PyResult<CombatUnits>{
-        Ok(self.units1.clone())
-    }
-    #[getter]
-    fn get_units2(&self) -> PyResult<CombatUnits>{
-        Ok(self.units2.clone())
-    }
+//    #[getter]
+//    fn get_units1(&self) -> PyResult<CombatUnits>{
+//        Ok(self.units1.clone())
+//    }
+//    #[getter]
+//    fn get_units2(&self) -> PyResult<CombatUnits>{
+//        Ok(self.units2.clone())
+//    }
     // #[setter]
     // fn set_units1(&mut self, value: Vec<CombatUnit>){
     //     self.units1 = value;

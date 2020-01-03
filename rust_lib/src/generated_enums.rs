@@ -1,7 +1,15 @@
-/// A list of known StarCraft II abilities
+use crate::num_traits::{FromPrimitive, ToPrimitive};
+use pyo3::{FromPyObject, PyResult, ObjectProtocol, PyObject, ToPyObject, Python, FromPy, IntoPy};
+use pyo3::types::{PyAny};
+use pyo3::derive_utils::IntoPyResult;
+use std::fmt;
+
+
+
 #[allow(missing_docs)]
-#[derive(Debug, Eq, PartialEq, Copy, Clone, Hash)]
+#[derive(Primitive,Debug, Eq, PartialEq, Copy, Clone, Hash)]
 #[allow(non_camel_case_types)]
+#[allow(dead_code)]
 pub enum AbilityId {
 	NULL_NULL = 0,
 	SMART = 1,
@@ -1265,9 +1273,44 @@ pub enum AbilityId {
 	MORPHTOCOLLAPSIBLEROCKTOWERDEBRISRAMPLEFTGREEN_CANCEL = 3798,
 	MORPHTOCOLLAPSIBLEROCKTOWERDEBRISRAMPRIGHTGREEN_CANCEL = 3800,
 	AMORPHOUSARMORCLOUD_AMORPHOUSARMORCLOUD = 3801,}
-/// A unit (could be structure, a worker, or military).
-#[derive(Debug, Clone)]
+
+
+
+impl fmt::Display for AbilityId {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{:?}", self)
+	}
+}
+impl Default for AbilityId {
+	fn default() -> Self {
+		AbilityId::NULL_NULL
+	}
+}
+impl ToPyObject for AbilityId{
+	fn to_object(&self, py: Python) -> PyObject {
+		self.to_i32().unwrap().to_object(py)
+	}
+}
+impl FromPy<AbilityId> for PyObject {
+	fn from_py(other: AbilityId, py: Python) -> Self {
+		let _other: i32 = other.to_i32().unwrap();
+		_other.into_py(py)
+	}
+}
+impl<'source> FromPyObject<'source> for AbilityId{
+	fn extract(ob: &'source PyAny)-> PyResult<AbilityId>{
+		let ob1: i32 = ob.extract::<i32>().unwrap();
+		let x : AbilityId=AbilityId::from_i32(ob1).unwrap_or_default();
+		Ok(x).into_py_result()
+	}
+}
+
+
+
+#[allow(missing_docs)]
+#[derive(Primitive,Debug, Eq, PartialEq, Copy, Clone, Hash)]
 #[allow(non_camel_case_types)]
+#[allow(dead_code)]
 pub enum UnitTypeId {
 	NOTAUNIT = 0,
 	SYSTEM_SNAPSHOT_DUMMY = 1,
@@ -3254,9 +3297,44 @@ pub enum UnitTypeId {
 	COLLAPSIBLEROCKTOWERPUSHUNITRAMPRIGHTGREEN = 1982,
 	COLLAPSIBLEROCKTOWERRAMPLEFTGREEN = 1983,
 	COLLAPSIBLEROCKTOWERRAMPRIGHTGREEN = 1984,}
-/// A unit (could be structure, a worker, or military).
-#[derive(Debug, Clone)]
+
+
+
+impl fmt::Display for UnitTypeId {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{:?}", self)
+	}
+}
+impl Default for UnitTypeId {
+	fn default() -> Self {
+		UnitTypeId::NOTAUNIT
+	}
+}
+impl ToPyObject for UnitTypeId{
+	fn to_object(&self, py: Python) -> PyObject {
+		self.to_i32().unwrap().to_object(py)
+	}
+}
+impl FromPy<UnitTypeId> for PyObject {
+	fn from_py(other: UnitTypeId, py: Python) -> Self {
+		let _other: i32 = other.to_i32().unwrap();
+		_other.into_py(py)
+	}
+}
+impl<'source> FromPyObject<'source> for UnitTypeId{
+	fn extract(ob: &'source PyAny)-> PyResult<UnitTypeId>{
+		let ob1: i32 = ob.extract::<i32>().unwrap();
+		let x : UnitTypeId=UnitTypeId::from_i32(ob1).unwrap_or_default();
+		Ok(x).into_py_result()
+	}
+}
+
+
+
+#[allow(missing_docs)]
+#[derive(Primitive,Debug, Eq, PartialEq, Copy, Clone, Hash)]
 #[allow(non_camel_case_types)]
+#[allow(dead_code)]
 pub enum BuffId {
 	NULL = 0,
 	RADAR25 = 1,
@@ -3552,9 +3630,96 @@ pub enum BuffId {
 	RESONATINGGLAIVESPHASESHIFT = 291,
 	AMORPHOUSARMORCLOUD = 292,
 	RAVENSHREDDERMISSILEARMORREDUCTIONUISUBTRUCT = 293,}
-/// A unit (could be structure, a worker, or military).
-#[derive(Debug, Clone)]
+
+
+
+impl fmt::Display for BuffId {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{:?}", self)
+	}
+}
+impl Default for BuffId {
+	fn default() -> Self {
+		BuffId::NULL
+	}
+}
+impl ToPyObject for BuffId{
+	fn to_object(&self, py: Python) -> PyObject {
+		self.to_i32().unwrap().to_object(py)
+	}
+}
+impl FromPy<BuffId> for PyObject {
+	fn from_py(other: BuffId, py: Python) -> Self {
+		let _other: i32 = other.to_i32().unwrap();
+		_other.into_py(py)
+	}
+}
+impl<'source> FromPyObject<'source> for BuffId{
+	fn extract(ob: &'source PyAny)-> PyResult<BuffId>{
+		let ob1: i32 = ob.extract::<i32>().unwrap();
+		let x : BuffId=BuffId::from_i32(ob1).unwrap_or_default();
+		Ok(x).into_py_result()
+	}
+}
+
+
+
+#[allow(missing_docs)]
+#[derive(Primitive,Debug, Eq, PartialEq, Copy, Clone, Hash)]
 #[allow(non_camel_case_types)]
+#[allow(dead_code)]
+pub enum EffectId {
+	NULL = 0,
+	PSISTORMPERSISTENT = 1,
+	GUARDIANSHIELDPERSISTENT = 2,
+	TEMPORALFIELDGROWINGBUBBLECREATEPERSISTENT = 3,
+	TEMPORALFIELDAFTERBUBBLECREATEPERSISTENT = 4,
+	THERMALLANCESFORWARD = 5,
+	SCANNERSWEEP = 6,
+	NUKEPERSISTENT = 7,
+	LIBERATORTARGETMORPHDELAYPERSISTENT = 8,
+	LIBERATORTARGETMORPHPERSISTENT = 9,
+	BLINDINGCLOUDCP = 10,
+	RAVAGERCORROSIVEBILECP = 11,
+	LURKERMP = 12,}
+
+
+
+impl fmt::Display for EffectId {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{:?}", self)
+	}
+}
+impl Default for EffectId {
+	fn default() -> Self {
+		EffectId::NULL
+	}
+}
+impl ToPyObject for EffectId{
+	fn to_object(&self, py: Python) -> PyObject {
+		self.to_i32().unwrap().to_object(py)
+	}
+}
+impl FromPy<EffectId> for PyObject {
+	fn from_py(other: EffectId, py: Python) -> Self {
+		let _other: i32 = other.to_i32().unwrap();
+		_other.into_py(py)
+	}
+}
+impl<'source> FromPyObject<'source> for EffectId{
+	fn extract(ob: &'source PyAny)-> PyResult<EffectId>{
+		let ob1: i32 = ob.extract::<i32>().unwrap();
+		let x : EffectId=EffectId::from_i32(ob1).unwrap_or_default();
+		Ok(x).into_py_result()
+	}
+}
+
+
+
+#[allow(missing_docs)]
+#[derive(Primitive,Debug, Eq, PartialEq, Copy, Clone, Hash)]
+#[allow(non_camel_case_types)]
+#[allow(dead_code)]
 pub enum UpgradeId {
 	NULL = 0,
 	CARRIERLAUNCHSPEEDUPGRADE = 1,
@@ -3858,20 +4023,37 @@ pub enum UpgradeId {
 	AMPLIFIEDSHIELDING = 299,
 	PSIONICAMPLIFIERS = 300,
 	SECRETEDCOATING = 301,}
-/// A unit (could be structure, a worker, or military).
-#[derive(Debug, Clone)]
-#[allow(non_camel_case_types)]
-pub enum EffectId {
-	NULL = 0,
-	PSISTORMPERSISTENT = 1,
-	GUARDIANSHIELDPERSISTENT = 2,
-	TEMPORALFIELDGROWINGBUBBLECREATEPERSISTENT = 3,
-	TEMPORALFIELDAFTERBUBBLECREATEPERSISTENT = 4,
-	THERMALLANCESFORWARD = 5,
-	SCANNERSWEEP = 6,
-	NUKEPERSISTENT = 7,
-	LIBERATORTARGETMORPHDELAYPERSISTENT = 8,
-	LIBERATORTARGETMORPHPERSISTENT = 9,
-	BLINDINGCLOUDCP = 10,
-	RAVAGERCORROSIVEBILECP = 11,
-	LURKERMP = 12,}
+
+
+
+impl fmt::Display for UpgradeId {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{:?}", self)
+	}
+}
+impl Default for UpgradeId {
+	fn default() -> Self {
+		UpgradeId::NULL
+	}
+}
+impl ToPyObject for UpgradeId{
+	fn to_object(&self, py: Python) -> PyObject {
+		self.to_i32().unwrap().to_object(py)
+	}
+}
+impl FromPy<UpgradeId> for PyObject {
+	fn from_py(other: UpgradeId, py: Python) -> Self {
+		let _other: i32 = other.to_i32().unwrap();
+		_other.into_py(py)
+	}
+}
+impl<'source> FromPyObject<'source> for UpgradeId{
+	fn extract(ob: &'source PyAny)-> PyResult<UpgradeId>{
+		let ob1: i32 = ob.extract::<i32>().unwrap();
+		let x : UpgradeId=UpgradeId::from_i32(ob1).unwrap_or_default();
+		Ok(x).into_py_result()
+	}
+}
+
+
+

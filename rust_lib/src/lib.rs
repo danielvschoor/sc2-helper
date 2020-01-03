@@ -2,6 +2,10 @@ mod combat_predictor;
 mod combat_unit;
 mod generated_enums;
 use pyo3::prelude::*;
+#[macro_use]
+extern crate enum_primitive_derive;
+extern crate num_traits;
+
 
 #[pymodule]
 fn sc2_helper(_py: Python, m: &PyModule) -> PyResult<()> {

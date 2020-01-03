@@ -1,4 +1,5 @@
 use generated_enums::Ability
+use {FromProto};
 
 #[derive(Debug, Clone)]
 pub struct AbilityData {
@@ -30,7 +31,7 @@ impl AbilityData {
     }
 
     /// Indicates whether the ability is available to the current mods/map.
-    pub fn is_available(&self) -> bool {
+    pub fn get_available(&self) -> bool {
         self.available
     }
 
@@ -97,52 +98,52 @@ impl AbilityData {
     }
 }
 
-// impl FromProto<data::AbilityData> for AbilityData {
-//     fn from_proto(mut data: data::AbilityData) -> Result<Self> {
-//         Ok(Self {
-//             available: data.get_available(),
-//             ability: Ability::from_proto(data.get_ability_id())?,
-//             link_name: data.take_link_name(),
-//             link_index: data.get_link_index(),
-//             button_name: data.take_button_name(),
-//             friendly_name: data.take_friendly_name(),
-//             hotkey: data.take_hotkey(),
-//             remaps_to_ability: {
-//                 if data.has_remaps_to_ability_id() {
-//                     Some(Ability::from_proto(
-//                         data.get_remaps_to_ability_id(),
-//                     )?)
-//                 } else {
-//                     None
-//                 }
-//             },
-//             remaps_from_ability: vec![],
-//             target: match data.get_target() {
-//                 data::AbilityData_Target::None => None,
-//                 data::AbilityData_Target::Point => Some(AbilityTarget::Point),
-//                 data::AbilityData_Target::Unit => Some(AbilityTarget::Unit),
-//                 data::AbilityData_Target::PointOrUnit => {
-//                     Some(AbilityTarget::PointOrUnit)
-//                 },
-//                 data::AbilityData_Target::PointOrNone => {
-//                     Some(AbilityTarget::PointOrNone)
-//                 },
-//             },
-//             allow_minimap: data.get_allow_minimap(),
-//             allow_autocast: data.get_allow_autocast(),
-//             is_building: data.get_is_building(),
-//             footprint_radius: {
-//                 if data.get_is_building() && data.has_footprint_radius() {
-//                     Some(data.get_footprint_radius())
-//                 } else {
-//                     None
-//                 }
-//             },
-//             is_instant_placement: data.get_is_instant_placement(),
-//             cast_range: data.get_cast_range(),
-//         })
-//     }
-// }
+impl FromProto<AbilityData> for AbilityData {
+    fn from_proto(mut data: AbilityData) -> Result<Self> {
+        Ok(Self {
+            available: data.get_available(),
+            ability: Ability::from_proto(data.get_ability_id())?,
+            link_name: data.take_link_name(),
+            link_index: data.get_link_index(),
+            button_name: data.take_button_name(),
+            friendly_name: data.take_friendly_name(),
+            hotkey: data.take_hotkey(),
+            remaps_to_ability: {
+                if data.has_remaps_to_ability_id() {
+                    Some(Ability::from_proto(
+                        data.get_remaps_to_ability_id(),
+                    )?)
+                } else {
+                    None
+                }
+            },
+            remaps_from_ability: vec![],
+            target: match data.get_target() {
+                data::AbilityData_Target::None => None,
+                data::AbilityData_Target::Point => Some(AbilityTarget::Point),
+                data::AbilityData_Target::Unit => Some(AbilityTarget::Unit),
+                data::AbilityData_Target::PointOrUnit => {
+                    Some(AbilityTarget::PointOrUnit)
+                },
+                data::AbilityData_Target::PointOrNone => {
+                    Some(AbilityTarget::PointOrNone)
+                },
+            },
+            allow_minimap: data.get_allow_minimap(),
+            allow_autocast: data.get_allow_autocast(),
+            is_building: data.get_is_building(),
+            footprint_radius: {
+                if data.get_is_building() && data.has_footprint_radius() {
+                    Some(data.get_footprint_radius())
+                } else {
+                    None
+                }
+            },
+            is_instant_placement: data.get_is_instant_placement(),
+            cast_range: data.get_cast_range(),
+        })
+    }
+}
 
 struct UnitTypeData{
 

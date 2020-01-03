@@ -1,5 +1,7 @@
 import json
 import shutil
+import generation_data as gd
+
 def make_key(key):
     if key[0].isdigit():
         key = "_" + key
@@ -69,64 +71,25 @@ def parse_data(data):
 
     return {"Abilities":abilities, "Units":units, "Upgrades":upgrades, "Effects":effects, "Buffs":buffs}
 
-def generate_abilities(data):
-    return_list = [
-        "/// A list of known StarCraft II abilities", 
-        "#[allow(missing_docs)]",
-        "#[derive(Debug, Eq, PartialEq, Copy, Clone, Hash)]",
-        "#[allow(non_camel_case_types)]",
-        "pub enum AbilityId {"]
+def generate_for(enum, data):
+    return_list = []
+    return_list += gd.macros
+    return_list += [f"pub enum {enum} {{"]
     return_list += [f"\t{key} = {value}," for key, value in data.items()]
-    return ["\n".join(return_list) +"}"]
+    # return_list 
+    return ["\n".join(return_list) +"}"] +["\n\n"] +gd.implementations(enum)
 
-def generate_units(data):
-    return_list = [
-        "/// A unit (could be structure, a worker, or military).", 
-        "#[derive(Debug, Clone)]",
-        "#[allow(non_camel_case_types)]",
-        
-        "pub enum UnitTypeId {"]
-    return_list += [f"\t{key} = {value}," for key, value in data.items()]
-    return ["\n".join(return_list) +"}"]
-
-def generate_upgrades(data):
-    return_list = [
-        "/// A unit (could be structure, a worker, or military).", 
-        "#[derive(Debug, Clone)]",
-        "#[allow(non_camel_case_types)]",
-        "pub enum UpgradeId {"]
-    return_list += [f"\t{key} = {value}," for key, value in data.items()]
-    return ["\n".join(return_list) +"}"]
-
-def generate_effects(data):
-    return_list = [
-        "/// A unit (could be structure, a worker, or military).", 
-        "#[derive(Debug, Clone)]",
-        "#[allow(non_camel_case_types)]",
-        "pub enum EffectId {"]
-    return_list += [f"\t{key} = {value}," for key, value in data.items()]
-    return ["\n".join(return_list) +"}"]
-
-def generate_buffs(data):
-    return_list = [
-        "/// A unit (could be structure, a worker, or military).", 
-        "#[derive(Debug, Clone)]",
-        "#[allow(non_camel_case_types)]",
-        "pub enum BuffId {"]
-    return_list += [f"\t{key} = {value}," for key, value in data.items()]
-    return ["\n".join(return_list) +"}"]
+    
 
 def generate(file="D:\Documents\StarCraft II\stableid.json"):
-    # base_data = ["use {FromProto, IntoProto, Result};"]
-    base_data = []
+    to_generate = ["AbilityId", "UnitTypeId", "BuffId","EffectId","UpgradeId"]
+    map_data_to_id = {"AbilityId":"Abilities", "UnitTypeId":"Units","BuffId":"Buffs","EffectId":"Effects","UpgradeId":"Upgrades"}
+    base_data = gd.base_data +["\n\n"]
     with open(file, 'r') as f:
         file_data = json.load(f)
     data = parse_data(file_data)
-    base_data += generate_abilities(data['Abilities'])
-    base_data += generate_units(data['Units'])
-    base_data += generate_buffs(data['Buffs'])
-    base_data += generate_upgrades(data['Upgrades'])
-    base_data += generate_effects(data['Effects'])
+    for gen in to_generate:
+        base_data += generate_for(gen, data[map_data_to_id[gen]]) +["\n\n"]
     with open('generated_enums.rs','w+') as f:
         for x in base_data:
             f.write(x+'\n')
@@ -134,7 +97,7 @@ def generate(file="D:\Documents\StarCraft II\stableid.json"):
     
 def main():
     generate()
-    shutil.move('generated_enums.rs', "src/generated_enums.rs")
+    shutil.move('generated_enums.rs', "rust_lib/src/generated_enums.rs")
     
 if __name__ == "__main__":
     main()

@@ -10,6 +10,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 cute = "0.3.0"
+enum-primitive-derive = "^0.1"
+num-traits = "^0.1"
 
 [dependencies.pyo3]
 version = "0.8.2"

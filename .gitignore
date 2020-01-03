@@ -2,3 +2,4 @@
 .idea
 rust_lib/target
 .vscode
+sc2_helper.pyd
