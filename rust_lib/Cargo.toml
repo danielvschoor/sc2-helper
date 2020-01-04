@@ -14,5 +14,11 @@ enum-primitive-derive = "^0.1"
 num-traits = "^0.1"
 
 [dependencies.pyo3]
-version = "0.8.2"
+#version = "0.8.2"
+git = "https://github.com/PyO3/pyo3.git"
+branch = "master"
 features = ["extension-module"]
+
+[dependencies.sc2-techtree]
+git = "https://github.com/danielvschoor/sc2-techtree.git"
+branch = "master"

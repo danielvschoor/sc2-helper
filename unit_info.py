@@ -50,7 +50,7 @@ class WeaponInfo:
     def __init__(self, weapon=None):
         if weapon:
             self._weapon = weapon
-            self._type = weapon.type
+            self._weapon_type = weapon.type
             self._attacks = weapon.attacks
             self._damage = weapon.damage
             self._damage_bonus = weapon.damage_bonus
@@ -61,7 +61,7 @@ class WeaponInfo:
             self._splash = 0
         else:
             self._weapon = None
-            self._type = None
+            self._weapon_type = None
             self._attacks = 0
             self._damage = 0
             self._damage_bonus = []
@@ -72,7 +72,7 @@ class WeaponInfo:
             self._splash = 0
     
     def init_battle_cruiser_air(self):
-        self._type = TargetType.Air.value
+        self._weapon_type = TargetType.Air.value
         self._damage_ = 5
         self._damage_bonus = []
         self._attacks = 1
@@ -80,7 +80,7 @@ class WeaponInfo:
         self._speed = 0.16 * 1.4
     
     def init_battle_cruiser_ground(self):
-        self._type = TargetType.Ground.value
+        self._weapon_type = TargetType.Ground.value
         self._damage_ = 8
         self._damage_bonus = []
         self._attacks = 1
@@ -142,6 +142,17 @@ class UnitInfo:
         self._air_weapons = None
         self._ground_weapons = None
         self._attack_range = None
+
+    def get_unit_info_as_dict(self):
+        attribs = {k:v for k,v in self.__dict__.items() if not k.startswith("_")}
+        for name in dir(self.__class__):
+            obj = getattr(self.__class__, name)
+            if isinstance(obj, property):
+                obj.__get__(self, self.__class__)
+                val = obj.__get__(self, self.__class__)
+                attribs[name]=val
+
+        return attribs
 
     @property
     def unit_radius(self):
@@ -277,3 +288,7 @@ class UnitInfo:
         #     info = self.combat_info[owner - 1][type]
         #     return max(info.air_weapon.range(), info.ground_weapon.range())
 
+    @property
+    def ability_id(self):
+        return self._ability_id
+    

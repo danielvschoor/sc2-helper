@@ -2,7 +2,7 @@ use crate::num_traits::{FromPrimitive, ToPrimitive};
 use pyo3::{FromPyObject, PyResult, ObjectProtocol, PyObject, ToPyObject, Python, FromPy, IntoPy};
 use pyo3::types::{PyAny};
 use pyo3::derive_utils::IntoPyResult;
-use std::fmt;
+use std::fmt;use sc2_techtree::{UnitTypeId as UTI, AbilityId as AI, UpgradeId as UI };
 
 
 
@@ -1302,6 +1302,11 @@ impl<'source> FromPyObject<'source> for AbilityId{
 		let ob1: i32 = ob.extract::<i32>().unwrap();
 		let x : AbilityId=AbilityId::from_i32(ob1).unwrap_or_default();
 		Ok(x).into_py_result()
+	}
+}
+impl AbilityId{
+	pub fn to_tt(self)-> AI{
+		AI::new(self.to_u32().unwrap())
 	}
 }
 
@@ -3328,6 +3333,11 @@ impl<'source> FromPyObject<'source> for UnitTypeId{
 		Ok(x).into_py_result()
 	}
 }
+impl UnitTypeId{
+	pub fn to_tt(self)-> UTI{
+		UTI::new(self.to_u32().unwrap())
+	}
+}
 
 
 
@@ -3664,6 +3674,9 @@ impl<'source> FromPyObject<'source> for BuffId{
 
 
 
+
+
+
 #[allow(missing_docs)]
 #[derive(Primitive,Debug, Eq, PartialEq, Copy, Clone, Hash)]
 #[allow(non_camel_case_types)]
@@ -3713,6 +3726,9 @@ impl<'source> FromPyObject<'source> for EffectId{
 		Ok(x).into_py_result()
 	}
 }
+
+
+
 
 
 
@@ -4052,6 +4068,11 @@ impl<'source> FromPyObject<'source> for UpgradeId{
 		let ob1: i32 = ob.extract::<i32>().unwrap();
 		let x : UpgradeId=UpgradeId::from_i32(ob1).unwrap_or_default();
 		Ok(x).into_py_result()
+	}
+}
+impl UpgradeId{
+	pub fn to_tt(self)-> UI{
+		UI::new(self.to_u32().unwrap())
 	}
 }
 

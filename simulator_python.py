@@ -7,6 +7,7 @@ from data_caching import DataCache
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.unit import Unit
 from sc2.data import Attribute
+import sc2_helper as sh
 import time as Time
 
 class SurroundInfo:
@@ -551,10 +552,14 @@ def max_surround(enemy_ground_unit_area: float, enemy_ground_units: int, unit_ra
     return max_attackers_per_defender, max_melee_attackers
 
 class CombatUnit(Unit):
-    def __init__(self, unit=None,owner=None,type=None, health=None, flying=None):
+    def __init__(self, unit=None,owner=None,type=None, health=None, flying=None, data_cache=None):
         self.cache = {}
+        if not data_cache:
+            data_cache = DataCache
         self.data_cache = DataCache()
+        
         self._data = None
+        self._data_dict = None
         if unit:
             self._proto = unit._proto
             self._bot_object = unit._bot_object
@@ -598,6 +603,12 @@ class CombatUnit(Unit):
         if not self._data:
             self._data = self.data_cache.get_unit_data(self._type) 
         return self._data
+    
+    @property
+    def data_dict(self):
+        if not self._data_dict:
+            self._data_dict = self.data_cache.get_data_as_dict(self._type)
+        return self._data_dict
 
     @property
     def owner(self):
@@ -671,6 +682,16 @@ class CombatUnit(Unit):
     def buff_timer(self, value):
         self._buff_timer = value
     
+    def to_rust(self):
+        return sh.CombatUnit(_owner=self.owner, 
+                    _unit_type=self.type.value, 
+                    _health=self.health, 
+                    _health_max=self.health_max, 
+                    _shield=self.shield, 
+                    _shield_max=self.shield_max,
+                    _energy=self.energy, 
+                    _flying=self.is_flying, 
+                    _buff_timer=self.buff_timer)
 
     def modify_health(self, delta):
         if delta < 0:
@@ -715,6 +736,17 @@ def test():
     import time
     tech_tree = TechTree()
     
+    units1=[CombatUnit(owner=1, type=UnitTypeId.MARAUDER, health=50, flying=False) for _ in range(20)]+[make_unit(1, UnitTypeId.MEDIVAC,tech_tree) for _ in range(5)]
+    units2= [CombatUnit(owner=2, type=UnitTypeId.ZERGLING, health=35, flying=False) for _ in range(50)]
+    print(units1[0].data_dict)
+    # cp = CombatPredictor(units1, units2)
+    # start = time.time()
+    # r = cp.predict_engage()
+    # end = time.time()
+    # print(end-start)
+    # winner = cp.owner_with_best_outcome()
+    # print(winner)
+    # assert(winner == 1)
    
     # units1=[
     #         make_unit(1, UnitTypeId.PYLON,tech_tree),
@@ -748,19 +780,9 @@ def test():
     # cp = CombatPredictor(units1, units2)
     # r = cp.predict_engage()
     # winner = cp.owner_with_best_outcome()
-    # assert(winner == 1)
+    # assert(winner == 1) 
     
     
-    units1=[CombatUnit(owner=1, type=UnitTypeId.MARINE, health=50, flying=False) for _ in range(20)]+[make_unit(1, UnitTypeId.MEDIVAC,tech_tree) for _ in range(5)]
-    units2= [CombatUnit(owner=2, type=UnitTypeId.ZERGLING, health=35, flying=False) for _ in range(50)]
-    cp = CombatPredictor(units1, units2)
-    start = time.time()
-    r = cp.predict_engage()
-    end = time.time()
-    print(end-start)
-    winner = cp.owner_with_best_outcome()
-    print(winner)
-    assert(winner == 1)
     
 
     # units1=[

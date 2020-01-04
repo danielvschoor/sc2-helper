@@ -182,4 +182,6 @@ def main():
     return 0
 
 if __name__ == "__main__":
-    main()
+    dc = DataCache()
+    dc.get_data_as_dict()
+    # main()

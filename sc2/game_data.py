@@ -123,6 +123,70 @@ class AbilityData:
     def cost(self) -> Cost:
         return self._game_data.calculate_ability_cost(self.id)
 
+    @property
+    def p_available(self):
+        return self._proto.available
+    
+    @property
+    def p_ability(self):
+        return self._proto.ability_id
+    
+    @property
+    def p_link_name(self):
+        return self._proto.link_name
+    
+    @property
+    def p_link_index(self):
+        return self._proto.link_index
+    
+    @property
+    def p_button_name(self):
+        return self._proto.button_name
+    
+    @property
+    def p_friendly_name(self):
+        return self._proto.friendly_name
+    
+    @property
+    def p_hotkey(self):
+        return self._proto.hotkey
+    
+    @property
+    def p_remaps_to_ability(self):
+        return self._proto.remaps_to_ability_id
+    
+    # @property
+    # def p_remaps_from_ability(self):
+    #     return self._proto.remaps_from_ability_id
+    
+    @property
+    def p_target(self):
+        return self._proto.target
+    
+    @property
+    def p_allow_minimap(self):
+        return self._proto.allow_minimap
+    
+    @property
+    def p_allow_autocast(self):
+        return self._proto.allow_autocast
+    
+    @property
+    def p_is_building(self):
+        return self._proto.is_building
+    
+    @property
+    def p_footprint_radius(self):
+        return self._proto.footprint_radius
+    
+    @property
+    def p_is_instant_placement(self):
+        return self._proto.is_instant_placement
+    
+    @property
+    def p_cast_range(self):
+        return self._proto.cast_range
+
 
 class UnitTypeData:
     def __init__(self, game_data: GameData, proto):
@@ -267,6 +331,93 @@ class UnitTypeData:
             self._proto.build_time,
         )
 
+    @property
+    def p_ability_id(self):
+        return self._proto.ability_id
+
+    @property
+    def p_armor(self):
+        return self._proto.armor
+
+    @property
+    def p_attributes(self):
+        return self._proto.attributes
+
+    @property
+    def p_available(self):
+        return self._proto.available
+
+    @property
+    def p_build_time(self):
+        return self._proto.build_time
+        
+    @property
+    def p_cargo_size(self):
+        return self._proto.cargo_size
+
+    @property
+    def p_food_provided(self):
+        return self._proto.food_provided
+
+    @property
+    def p_food_required(self):
+        return self._proto.food_required
+
+    @property
+    def p_has_minerals(self):
+        return self._proto.has_minerals
+
+    @property
+    def p_has_vespene(self):
+        return self._proto.has_vespene
+
+    @property
+    def p_mineral_cost(self):
+        return self._proto.mineral_cost
+
+    @property
+    def p_movement_speed(self):
+        return self._proto.movement_speed
+
+    @property
+    def p_name(self):
+        return self._proto.name
+
+    @property
+    def p_race(self):
+        return self._proto.race
+    
+    @property
+    def p_require_attached(self):
+        return self._proto.require_attached
+
+    @property
+    def p_sight_range(self):
+        return self._proto.sight_range
+    
+    @property
+    def p_tech_alias(self):
+        return self._proto.tech_alias
+    
+    @property
+    def p_tech_requirement(self):
+        return self._proto.tech_requirement
+    
+    @property
+    def p_unit_alias(self):
+        return self._proto.unit_alias
+    
+    @property
+    def p_unit_id(self):
+        return self._proto.unit_id
+    
+    @property
+    def p_vespene_cost(self):
+        return self._proto.vespene_cost
+    
+    @property
+    def p_weapons(self):
+        return self._proto.weapons
 
 class UpgradeData:
     def __init__(self, game_data: GameData, proto):
@@ -295,6 +446,30 @@ class UpgradeData:
     @property
     def cost(self) -> Cost:
         return Cost(self._proto.mineral_cost, self._proto.vespene_cost, self._proto.research_time)
+    
+    @property
+    def p_upgrade_id(self):
+        return self._proto.upgrade_id
+    
+    @property
+    def p_name(self):
+        return self._proto.name
+
+    @property
+    def p_mineral_cost(self):
+        return self._proto.mineral_cost
+    
+    @property
+    def p_vespene_cost(self):
+        return self._proto.vespene_cost
+
+    @property
+    def p_ability_id(self):
+        return self._proto.ability_id
+
+    @property
+    def p_research_time(self):
+        return self._proto.research_time
 
 
 class Cost:

@@ -24,6 +24,11 @@ class DataCache:
             unit_type = unit_type.value
         return UnitInfo(self.unit_data.get(unit_type, None))
     
+    def get_data_as_dict(self, unit_type):
+        if isinstance(unit_type, UnitTypeId):
+            unit_type = unit_type.value
+        return UnitInfo(self.unit_data.get(unit_type, None)).get_unit_info_as_dict()
+    
     def save_unit_data(self, unit_types, path=UNIT_DATA_CACHE_PATH):
         pass
     
