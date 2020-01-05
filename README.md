@@ -1,5 +1,5 @@
 # sc2-helper
-StarCraft 2 helper tools
+StarCraft 2 AI helper tools
 
 WIP:
 
