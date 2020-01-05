@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 mod combat_predictor;
 mod combat_unit;
 mod generated_enums;

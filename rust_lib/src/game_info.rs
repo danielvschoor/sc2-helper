@@ -536,20 +536,20 @@ impl<'source> FromPyObject<'source> for WeaponInfo {
 pub struct UnitInfo{
     ability_id: AbilityId,
     air_weapons: WeaponInfo,
-    armor: f64,
-    attack_range: f64,
+    armor: f32,
+    attack_range: f32,
     can_be_attacked_by_air_weapons: bool,
     ground_weapons: WeaponInfo,
     is_basic_harvester: bool,
     is_flying: bool,
     is_melee: bool,
     is_structure: bool,
-    max_health: f64,
-    max_shield: f64,
-    movement_speed: f64,
+    max_health: f32,
+    max_shield: f32,
+    movement_speed: f32,
     race: i32,
     type_data: UnitTypeData,
-    unit_radius: f64
+    unit_radius: f32
 }
 
 impl ToPyObject for UnitInfo{
