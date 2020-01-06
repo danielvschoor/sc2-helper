@@ -26,12 +26,15 @@ def test_data():
 
     
     cus = [cu.to_rust() for _ in range(2)]
+    cs = sp.CombatSettings()
+    cs.debug = False
     start_time2=time.time()
     # cp.units1 = cus
     # cp.units2 = cus
-    print(cp.predict_engage(cus, cus))
+    cp.predict_engage(cus, cus, 1,cs)
     end_time1 = time.time()
     print(end_time1-start_time2)
+
 
 
 # cu2 = sh.CombatUnit(_owner=cu.owner, 

@@ -2,7 +2,8 @@ use crate::num_traits::{FromPrimitive, ToPrimitive};
 use pyo3::{FromPyObject, PyResult, ObjectProtocol, PyObject, ToPyObject, Python, FromPy, IntoPy};
 use pyo3::types::{PyAny};
 use pyo3::derive_utils::IntoPyResult;
-use std::fmt;use sc2_techtree::{UnitTypeId as UTI, AbilityId as AI, UpgradeId as UI };
+use std::fmt;
+use sc2_techtree::{UnitTypeId as UTI, AbilityId as AI, UpgradeId as UI };
 
 
 

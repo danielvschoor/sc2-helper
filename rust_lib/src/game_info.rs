@@ -1,12 +1,15 @@
 use crate::generated_enums::{AbilityId, UnitTypeId, UpgradeId};
 use pyo3::{FromPyObject, PyResult, PyObject, FromPy, Python, IntoPy, ToPyObject, ObjectProtocol, PyErr};
-use std::collections::HashMap;
-
+use std::collections::{HashMap};
+use sc2_techtree::{Attribute as A, TechData};
 use pyo3::types::{PyAny};
 use pyo3::derive_utils::IntoPyResult;
 use crate::num_traits::{FromPrimitive, ToPrimitive};
 use std::borrow::Borrow;
-//use std::{hash, cmp};
+use sc2_techtree::{UnitType};
+use crate::combat_unit::IS_MELEE;
+
+
 
 #[allow(missing_docs)]
 #[derive(Primitive, Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -51,6 +54,26 @@ impl<'source> FromPyObject<'source> for Attribute{
 		let ob1: i32 = ob.extract::<i32>().unwrap();
 		let x : Attribute = Attribute::from_i32(ob1).unwrap_or_default();
 		Ok(x).into_py_result()
+	}
+}
+
+impl Attribute{
+	pub fn to_tt(self)-> A{
+        match self{
+            Attribute::LIGHT => A::Light,
+            Attribute::ARMORED => A::Armored,
+            Attribute::STRUCTURE => A::Structure,
+            Attribute::MASSIVE => A::Massive,
+            Attribute::BIOLOGICAL => A::Biological,
+            Attribute::MECHANICAL => A::Mechanical,
+            Attribute::PSIONIC => A::Psionic,
+            Attribute::HEROIC => A::Heroic,
+            Attribute::SUMMONED => A::Summoned,
+            Attribute::ROBOTIC => A::Robotic,
+            Attribute::HOVER => A::Hover,
+            _ => A::Light
+        }
+//		A::new(self.to_u32().unwrap())
 	}
 }
 
@@ -124,7 +147,7 @@ impl<'source> FromPyObject<'source> for WeaponTargetType{
 	}
 }
 #[allow(missing_docs)]
-#[derive(Primitive, Debug, Copy, Clone)]
+#[derive(Primitive, Debug, Copy, Clone, PartialEq)]
 pub enum Race {
     NORACE=0,
     TERRAN=1,
@@ -412,6 +435,9 @@ impl Weapon {
     pub fn get_speed(&self) -> f32 {
         self.speed
     }
+    pub fn get_dps(&self)-> f32{
+        return self.attacks as f32 / self.speed
+    }
 }
 
 impl<'source> FromPyObject<'source> for Weapon {
@@ -460,14 +486,30 @@ impl<'source> FromPyObject<'source> for Weapon {
 }
 
 #[derive(Debug, Clone)]
-struct WeaponInfo{
+pub struct WeaponInfo{
     weapon: Weapon,
-    get_dps: f32,
-    splash: f32,
+    pub splash: f32,
     base_dps: f32
 }
 
 impl WeaponInfo{
+    pub fn new(_weapon: &Weapon, _type: UnitTypeId, _upgrades: Option<&CombatUpgrades>, _target_upgrades: Option<&CombatUpgrades>, _data: &UnitTypeData, _tech_tree: &UnitType) -> Self{
+        let _splash: f32 = 0.0;
+        let bonus_damage: f32 = match _upgrades {
+            None => 0.0,
+            Some(t)=> get_damage_bonus(_type, t, _data,_tech_tree) as f32
+        };
+        let _base_dps: f32 = _weapon.damage + bonus_damage;
+        WeaponInfo{
+            weapon: _weapon.clone(),
+            splash: _splash,
+            base_dps: _base_dps}
+    }
+
+    pub fn get_dps(&self)->f32{
+        return  self.weapon.get_dps()
+
+    }
     pub fn set_weapon(&mut self,
                       _target_type: WeaponTargetType,
                       _damage: f32,
@@ -524,7 +566,6 @@ impl<'source> FromPyObject<'source> for WeaponInfo {
                     range: obj.getattr(py, "_range")?.extract(py)?,
                     speed: obj.getattr(py, "_speed")?.extract(py)?
                 },
-                get_dps: obj.getattr(py, "get_dps")?.extract(py)?,
                 splash: obj.getattr(py, "splash")?.extract(py)?,
                 base_dps: obj.getattr(py, "_base_dps")?.extract(py)?
             })
@@ -881,3 +922,273 @@ impl GameInfo{
         self.unit_data.get(id.borrow())
     }
 }
+
+pub fn is_melee(unit: UnitTypeId)-> bool{
+    IS_MELEE.contains(&unit)
+}
+
+
+pub fn get_damage_bonus(unit: UnitTypeId, upgrades:&CombatUpgrades, _data: &UnitTypeData, _tech_tree: &UnitType) -> i32 {
+    if _tech_tree.is_structure{
+        return 0;
+    }
+
+    let mut bonus: i32 = 0;
+    match _data.race.unwrap(){
+        Race::PROTOSS => {
+            if _tech_tree.is_flying{
+                if upgrades.has_upgrade(UpgradeId::PROTOSSAIRWEAPONSLEVEL1){
+                    bonus += 1;
+                }
+                if upgrades.has_upgrade(UpgradeId::PROTOSSAIRWEAPONSLEVEL2){
+                    bonus += 1;
+                }
+                if upgrades.has_upgrade(UpgradeId::PROTOSSAIRWEAPONSLEVEL3){
+                    bonus += 1;
+                }
+
+            }
+            else{
+                if upgrades.has_upgrade(UpgradeId::PROTOSSGROUNDWEAPONSLEVEL1){
+                    bonus += 1;
+            }
+                if upgrades.has_upgrade(UpgradeId::PROTOSSGROUNDWEAPONSLEVEL2){
+                    bonus += 1;
+            }
+                if upgrades.has_upgrade(UpgradeId::PROTOSSGROUNDWEAPONSLEVEL3){
+                    bonus += 1;
+            }
+
+        }
+    }
+        Race::ZERG => {
+        if _tech_tree.is_flying{
+            if upgrades.has_upgrade(UpgradeId::ZERGFLYERWEAPONSLEVEL1){
+                bonus += 1;
+            }
+            if upgrades.has_upgrade(UpgradeId::ZERGFLYERWEAPONSLEVEL2){
+                bonus += 1;
+            }
+            if upgrades.has_upgrade(UpgradeId::ZERGFLYERWEAPONSLEVEL3){
+                bonus += 1;
+            }
+        }
+            else if is_melee(unit){
+
+                    if upgrades.has_upgrade(UpgradeId::ZERGMELEEWEAPONSLEVEL1){
+                        bonus += 1;
+                    }
+                    if upgrades.has_upgrade(UpgradeId::ZERGMELEEWEAPONSLEVEL2){
+                        bonus += 1;
+                    }
+                    if upgrades.has_upgrade(UpgradeId::ZERGMELEEWEAPONSLEVEL3){
+                        bonus += 1;
+                    }
+
+            }
+            else{
+                if upgrades.has_upgrade(UpgradeId::ZERGMISSILEWEAPONSLEVEL1){
+                        bonus += 1;
+                    }
+                if upgrades.has_upgrade(UpgradeId::ZERGMISSILEWEAPONSLEVEL2){
+                        bonus += 1;
+                    }
+                if upgrades.has_upgrade(UpgradeId::ZERGMISSILEWEAPONSLEVEL3){
+                        bonus += 1;
+                    }
+            }
+        }
+        Race::TERRAN => { //TODO: Figure out mech and bio
+            let mechanical: A = Attribute::MECHANICAL.to_tt();
+            let biological: A = Attribute::BIOLOGICAL.to_tt();
+            if _tech_tree.is_flying{
+                if upgrades.has_upgrade(UpgradeId::TERRANSHIPWEAPONSLEVEL1){
+                        bonus += 1;
+                    }
+                if upgrades.has_upgrade(UpgradeId::TERRANSHIPWEAPONSLEVEL2){
+                        bonus += 1;
+                    }
+                if upgrades.has_upgrade(UpgradeId::TERRANSHIPWEAPONSLEVEL3){
+                        bonus += 1;
+                    }
+            }
+
+            else if _tech_tree.attributes.contains(&mechanical){
+                if upgrades.has_upgrade(UpgradeId::TERRANVEHICLEWEAPONSLEVEL1){
+                        bonus += 1;
+                    }
+                if upgrades.has_upgrade(UpgradeId::TERRANVEHICLEWEAPONSLEVEL2){
+                        bonus += 1;
+                    }
+                if upgrades.has_upgrade(UpgradeId::TERRANVEHICLEWEAPONSLEVEL3){
+                        bonus += 1;
+                    }
+            }
+            else{
+                if upgrades.has_upgrade(UpgradeId::TERRANINFANTRYWEAPONSLEVEL1){
+                        bonus += 1;
+                    }
+                if upgrades.has_upgrade(UpgradeId::TERRANINFANTRYWEAPONSLEVEL2){
+                        bonus += 1;
+                    }
+                if upgrades.has_upgrade(UpgradeId::TERRANINFANTRYWEAPONSLEVEL3){
+                        bonus += 1;
+                    }
+
+            }
+        }
+
+        _ => println!("Unknown Race for {:?}", unit)
+    }
+    return  bonus
+    }
+
+
+//    return bonus;
+
+
+pub fn get_armor_bonus(unit: UnitTypeId, upgrades: &CombatUpgrades, _data: &UnitTypeData, _tech_tree: &UnitType) -> f32 {
+    if _tech_tree.is_structure {
+        if _data.race.unwrap() == Race::TERRAN && upgrades.has_upgrade(UpgradeId::TERRANBUILDINGARMOR) {
+            return 2.0
+        }
+        return 0.0
+    }
+    let mut bonus: f32 = 0.0;
+
+    match _data.race.unwrap() {
+        Race::PROTOSS => {
+            if _tech_tree.is_flying {
+                if upgrades.has_upgrade(UpgradeId::PROTOSSAIRARMORSLEVEL1) {
+                    bonus += 1.0;
+                }
+                if upgrades.has_upgrade(UpgradeId::PROTOSSAIRARMORSLEVEL2) {
+                    bonus += 1.0;
+                }
+                if upgrades.has_upgrade(UpgradeId::PROTOSSAIRARMORSLEVEL3) {
+                    bonus += 1.0;
+                }
+            } else {
+                if upgrades.has_upgrade(UpgradeId::PROTOSSGROUNDARMORSLEVEL1) {
+                    bonus += 1.0;
+                }
+                if upgrades.has_upgrade(UpgradeId::PROTOSSGROUNDARMORSLEVEL2) {
+                    bonus += 1.0;
+                }
+                if upgrades.has_upgrade(UpgradeId::PROTOSSGROUNDARMORSLEVEL3) {
+                    bonus += 1.0;
+                }
+            }
+        }
+        Race::ZERG => {
+            if _tech_tree.is_flying {
+                if upgrades.has_upgrade(UpgradeId::ZERGFLYERARMORSLEVEL1) {
+                    bonus += 1.0;
+                }
+                if upgrades.has_upgrade(UpgradeId::ZERGFLYERARMORSLEVEL2) {
+                    bonus += 1.0;
+                }
+                if upgrades.has_upgrade(UpgradeId::ZERGFLYERARMORSLEVEL3) {
+                    bonus += 1.0;
+                }
+            }
+            else {
+                if upgrades.has_upgrade(UpgradeId::ZERGGROUNDARMORSLEVEL1) {
+                    bonus += 1.0;
+                }
+                if upgrades.has_upgrade(UpgradeId::ZERGGROUNDARMORSLEVEL2) {
+                    bonus += 1.0;
+                }
+                if upgrades.has_upgrade(UpgradeId::ZERGGROUNDARMORSLEVEL3) {
+                    bonus += 1.0;
+                }
+            }
+        }
+        Race::TERRAN => {
+            let mechanical: A = Attribute::MECHANICAL.to_tt();
+            let biological: A = Attribute::BIOLOGICAL.to_tt();
+            if _tech_tree.is_flying || _tech_tree.attributes.contains(&mechanical){
+                if upgrades.has_upgrade(UpgradeId::TERRANVEHICLEANDSHIPARMORSLEVEL1) {
+                    bonus += 1.0;
+                }
+                if upgrades.has_upgrade(UpgradeId::TERRANVEHICLEANDSHIPARMORSLEVEL2) {
+                    bonus += 1.0;
+                }
+                if upgrades.has_upgrade(UpgradeId::TERRANVEHICLEANDSHIPARMORSLEVEL3) {
+                    bonus += 1.0;
+                }
+            } else {
+                if upgrades.has_upgrade(UpgradeId::TERRANINFANTRYARMORSLEVEL1) {
+                    bonus += 1.0;
+                }
+                if upgrades.has_upgrade(UpgradeId::TERRANINFANTRYARMORSLEVEL2) {
+                    bonus += 1.0;
+                }
+                if upgrades.has_upgrade(UpgradeId::TERRANINFANTRYARMORSLEVEL2) {
+                    bonus += 1.0;
+                }
+            }
+        }
+
+        _ => println!("Unknown Race for {:?}", unit)
+    }
+    return bonus
+}
+#[derive(Clone, Hash)]
+pub struct CombatUpgrades(Vec<UpgradeId>);
+
+impl CombatUpgrades{
+    pub fn new(&self, upgrades: Vec<UpgradeId>) -> Self{
+        CombatUpgrades(upgrades)
+    }
+    pub fn has_upgrade(&self, upgrade: UpgradeId)->bool{
+        self.0.contains(&upgrade)
+    }
+}
+
+
+pub fn calculate_dps(attacker: UnitTypeId, target: UnitTypeId, weapon: &Weapon, attacker_upgrades: &CombatUpgrades, target_upgrades: &CombatUpgrades, _data: &GameInfo,_tech_tree: &TechData) -> f32 {
+    // canBeAttackedByAirWeapons is primarily for coloussus.
+    let target_tech_data: UnitType = _tech_tree.unittype(target.to_tt()).unwrap();
+    let target_game_data: &UnitTypeData = _data.get_unit_data(target).unwrap();
+
+    let attacker_tech_data: UnitType = _tech_tree.unittype(attacker.to_tt()).unwrap();
+    let attacker_game_data: &UnitTypeData = _data.get_unit_data(attacker).unwrap();
+    if weapon.target_type == WeaponTargetType::ANY || if can_be_attacked_by_air_weapons(target, _tech_tree ) {weapon.target_type == WeaponTargetType::AIR}  else {!target_tech_data.is_flying}{
+        let mut dmg: f32 = weapon.damage;
+
+        for b in &weapon.damage_bonus {
+            if target_tech_data.attributes.contains(&b.attribute.to_tt()){
+                dmg += b.bonus;
+            }
+        }
+
+        dmg += get_damage_bonus(attacker, attacker_upgrades,attacker_game_data, &attacker_tech_data ) as f32;
+
+        let mut armor: f32 = target_game_data.armor + get_armor_bonus(target, target_upgrades, attacker_game_data, &attacker_tech_data);
+
+        // Note: cannot distinguish between damage to shields and damage to health yet, so average out so that the armor is about 0.5 over the whole shield+health of the unit
+        // Important only for protoss
+        let max_health: f32 = target_tech_data.max_health.into();
+        let max_shield: f32 = target_tech_data.max_shield.unwrap().into();
+        armor = armor * max_health / (max_shield + max_health);
+
+        let mut time_between_attacks:f32 = weapon.speed;
+
+        if attacker == UnitTypeId::ADEPT && attacker_upgrades.has_upgrade(UpgradeId::ADEPTPIERCINGATTACK) {
+            time_between_attacks /= 1.45;
+        }
+        return if dmg - armor > 0.0 {
+            (dmg - armor) * weapon.attacks as f32 / time_between_attacks
+        } else {
+            0.0
+        }
+    }
+
+    return 0.0;
+}
+
+pub fn can_be_attacked_by_air_weapons(unit: UnitTypeId, tech_tree: &TechData)->bool{
+    tech_tree.unittype(unit.to_tt()).unwrap().is_flying || unit == UnitTypeId::COLOSSUS
+}
+
