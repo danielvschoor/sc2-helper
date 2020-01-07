@@ -8,14 +8,11 @@ use std::fs::File;
 use std::io::prelude::*;
 use rand::seq::{SliceRandom};
 use rand::{thread_rng};
-use std::borrow::Borrow;
+use std::borrow::{Borrow, BorrowMut};
 use std::f32::consts::PI;
-//use std::cmp::max;
-//use std::intrinsics::{sqrtf32, ceilf32};
 use rand::{Rng};
-use std::collections::HashSet;
-//use rand::distributions::Uniform;
-//use rand::distributions::Distribution;
+
+
 //const PI: f32 = 3.141592653589793238462643383279502884;
 
 #[derive(Clone, Copy)]
@@ -25,7 +22,7 @@ pub struct SurroundInfo{
 }
 
 
-pub fn max_surround(mut enemy_ground_unit_area: f32, mut enemy_ground_units: i32, zealot_radius: f32) -> SurroundInfo{
+pub fn max_surround(mut enemy_ground_unit_area: f32, enemy_ground_units: i32, zealot_radius: f32) -> SurroundInfo{
     if enemy_ground_units > 0{
         enemy_ground_unit_area /= 0.0;
     }
@@ -147,18 +144,16 @@ impl CombatPredictor{
 
         let debug: bool = combat_settings.debug;
         let zealot_radius = self.tech_data.unittype(UnitTypeId::ZEALOT.to_tt()).unwrap().radius;
-        let mut total_health1: f32 = 0.0;
-        let mut total_health2: f32 = 0.0;
 
         let mut temporary_units: Vec<CombatUnit> = Vec::<CombatUnit>::new();
         let mut rng = thread_rng();
 
         units1.shuffle(&mut rng);
         units2.shuffle(&mut rng);
-        for mut u in &mut units1{
+        for u in &mut units1{
             u.load_data(self.data.borrow(), self.tech_data.borrow())
         }
-        for mut u in &mut units2{
+        for u in &mut units2{
             u.load_data(self.data.borrow(), self.tech_data.borrow())
         }
         let mut average_health_by_time: Vec<f32> = vec![0.0,0.0];
@@ -182,42 +177,42 @@ impl CombatPredictor{
         let mut changed :bool = true;
         const MAX_ITERATIONS: u32=100;
         if combat_settings.start_time == 0.00{
-            for mut u in &mut units1{
+            for u in &mut units1{
                 u.buff_timer = 0.0;
             }
-             for mut u in &mut units2{
+             for u in &mut units2{
                 u.buff_timer = 0.0;
             }
         }
-        for it in 0..MAX_ITERATIONS{
-            if !changed{
+        for it in 0..MAX_ITERATIONS {
+            if !changed {
                 break;
             }
             let mut has_air1: i32 = 0;
-            let mut has_air2:i32 = 0;
-            let mut has_ground1:i32 =0;
-            let mut has_ground2: i32=0;
+            let mut has_air2: i32 = 0;
+            let mut has_ground1: i32 = 0;
+            let mut has_ground2: i32 = 0;
             let mut ground_area1: f32 = 0.0;
             let mut ground_area2: f32 = 0.0;
 
-            for mut u in &mut units1{
-                if u.health > 0.0{
+            for u in &mut units1 {
+                if u.health > 0.0 {
                     has_air1 += u.can_be_attacked_by_air_weapons() as i32;
                     has_ground1 += !u.is_flying as i32;
                     let r: f32 = u.get_radius();
-                    ground_area1 += r*r;
+                    ground_area1 += r * r;
 
                     average_health_by_time[0] += time * u.health + u.shield;
                     average_health_by_time_weight[0] += u.health + u.shield;
                 }
             }
 
-            for mut u in &mut units2{
-                if u.health > 0.0{
+            for mut u in &mut units2 {
+                if u.health > 0.0 {
                     has_air2 += u.can_be_attacked_by_air_weapons() as i32;
                     has_ground2 += !u.is_flying as i32;
                     let r: f32 = u.get_radius();
-                    ground_area2 += r*r;
+                    ground_area2 += r * r;
 
                     average_health_by_time[1] += time * u.health + u.shield;
                     average_health_by_time_weight[1] += u.health + u.shield;
@@ -227,86 +222,91 @@ impl CombatPredictor{
             let surround_info2: SurroundInfo = max_surround(ground_area1 * PI, has_ground1, zealot_radius.into());
 
             let dt: f32;
-            if 5 < 1+ (it/10){
+            if 5 < 1 + (it / 10) {
                 dt = 5 as f32;
+            } else {
+                dt = (1 + (it / 10)) as f32;
             }
-            else{
-                dt = (1+ (it/10)) as f32;
-            }
-            if debug{
+            if debug {
                 println!("Iteration: {:?} Time:  {:?}", it, time);
             }
             changed = false;
 
-            const GUARDIAN_SHIELD_UNITS: f32= 4.5 * 4.5 * PI * 0.4;
+            const GUARDIAN_SHIELD_UNITS: f32 = 4.5 * 4.5 * PI * 0.4;
 
             let mut guardian_shield_unit_fraction: Vec<f32> = vec![0.0, 0.0];
             let mut guardian_shield_covers_all_units: Vec<bool> = vec![false, false];
 
-            for group in 0..2{
-                let mut guardian_shield_area: f32=0.0;
+            for group in 0..2 {
+                let mut guardian_shield_area: f32 = 0.0;
 
-                let mut g = if group ==0 {&mut units1} else {&mut units2};
-                for u in g{
-                    if u.unit_type == UnitTypeId::SENTRY && u.buff_timer > 0.0{
+                let g = if group == 0 { &mut units1 } else { &mut units2 };
+                for u in g {
+                    if u.unit_type == UnitTypeId::SENTRY && u.buff_timer > 0.0 {
                         u.buff_timer -= dt;
                         guardian_shield_area += GUARDIAN_SHIELD_UNITS;
                     }
                 }
                 let mut total_area: f32 = 0.0;
-                let len = (if group ==0 {&mut units1} else {&mut units2}).len() ;
+                let len = (if group == 0 { &mut units1 } else { &mut units2 }).len();
 //                let len = g.clone().len() ;
-                for i in 0..len{
-                    let r: f32 = (if group ==0 {&mut units1} else {&mut units2})[i].get_radius();
-                    total_area += r*r*PI;
+                for i in 0..len {
+                    let r: f32 = (if group == 0 { &mut units1 } else { &mut units2 })[i].get_radius();
+                    total_area += r * r * PI;
                 }
                 guardian_shield_covers_all_units[group] = guardian_shield_area > total_area;
-                guardian_shield_unit_fraction[group] = if guardian_shield_area/(0.001 + total_area) > 0.8 {guardian_shield_area/(0.001 + total_area)}  else{0.8}
+                guardian_shield_unit_fraction[group] = if guardian_shield_area / (0.001 + total_area) > 0.8 { guardian_shield_area / (0.001 + total_area) } else { 0.8 }
             }
-            let group_units: Vec<&mut Vec<CombatUnit>> = vec![&mut units1, &mut units2];
-            for group in 0..2{
-                let mut g1 = group_units[group].clone();
-                let mut g2= group_units[group].clone();
-//let g1 = match group
-//    {
-//        0 => &mut units1,
-//        _ => &mut units2
-//    };
-//let g2 = match group
-//    {
-//        0 => &mut units2,
-//        _ => &mut units1
-//    };
-//let g2 = if group ==0 {&mut units2} else {&mut units1};
-                let surround: SurroundInfo = if group ==0{surround_info1} else {surround_info2};
+//            let mut group_units: Vec<Vec<CombatUnit>> = vec![units1, units2];
+            for group in 0..2 {
 
-                let max_extra_melee_distance = (ground_area1/PI).sqrt() * PI + (ground_area2/PI).sqrt() * PI;
+                let (g1, g2) = match group {
+                    0 => (&mut units1, &mut units2),
+                    1 => (&mut units2, &mut units1),
+                    _ => unreachable!(),
+                };
+
+//
+//                let g1 = match group{
+//                    0 => &mut units1,
+//                    1 => &mut units2,
+//                };
+//                let g2 = match group{
+//                    0 => &mut units2,
+//                    1 => &mut units1,
+//                };
+//                let mut g1: &Vec<CombatUnit> = if group == 0 {&units1} else {&units2};
+//                let mut g2: &Vec<CombatUnit> = if group == 0 {&units2} else {&units1};
+
+                let surround: SurroundInfo = if group == 0 { surround_info1 } else { surround_info2 };
+
+                let max_extra_melee_distance = (ground_area1 / PI).sqrt() * PI + (ground_area2 / PI).sqrt() * PI;
 
                 let mut num_melee_units_used: i32 = 0;
                 let did_activate_guardian_shield: bool = false;
 
-                let mut opponent_fraction_melee_units:f32 =0.0;
+                let mut opponent_fraction_melee_units: f32 = 0.0;
 
-                for u in g2.clone(){
-                    if u.is_melee() && u.health > 0.0{
-                        opponent_fraction_melee_units +=1.0;
+                for u in g2.clone() {
+                    if u.is_melee() && u.health > 0.0 {
+                        opponent_fraction_melee_units += 1.0;
                     }
                 }
-                if g2.len() > 0{
+                if g2.len() > 0 {
                     opponent_fraction_melee_units /= g2.len() as f32;
                 }
                 let has_been_healed: Vec<bool> = vec![false; g2.len()];
                 let mut melee_unit_attack_count: Vec<i32> = vec![0; g2.len()];
 //                let melee_units_in_attack_range: Vec<i32> = vec![0; g2.len()];
 
-                if debug{
+                if debug {
                     println!("Max melee attackers: {:?} {:?} num units: {:?}", surround.max_melee_attackers, surround.max_attackers_per_defender, g1.len())
                 }
 
-                for i in 0..g1.len(){
+                for i in 0..g1.len() {
                     let unit = &g1[i];
 
-                    if unit.health == 0.0{
+                    if unit.health == 0.0 {
                         continue
                     }
 
@@ -314,7 +314,7 @@ impl CombatPredictor{
                     let air_dps = unit.get_dps(true);
                     let ground_dps = unit.get_dps(false);
 
-                    if debug{
+                    if debug {
                         println!("Processing {:?}, health: {:?}, shield: {:?}, energy: {:?}", unit.get_name(), unit.health, unit.shield, unit.energy);
                     }
 
@@ -322,137 +322,154 @@ impl CombatPredictor{
                     INSERT SPECIAL UNIT CODE HERE
                     */
 
-                    if air_dps ==0.0 && ground_dps == 0.0{
+                    if air_dps == 0.0 && ground_dps == 0.0 {
                         continue
                     }
 
-                    if combat_settings.workers_do_no_damage && unit.is_basic_harvester(){
+                    if combat_settings.workers_do_no_damage && unit.is_basic_harvester() {
                         continue
                     }
                     let is_unit_melee: bool = unit.is_melee();
 
-                    if is_unit_melee && combat_settings.enable_surround_limits && num_melee_units_used > surround.max_melee_attackers{
+                    if is_unit_melee && combat_settings.enable_surround_limits && num_melee_units_used > surround.max_melee_attackers {
                         continue
                     }
 
                     /*INSERT TIMING ADJUSTMENT HERE*/
 
-                    let mut best_target: Option<CombatUnit> = None;
-                    let mut best_target_index:i32=-1;
+                    let mut best_target: Option<&CombatUnit> = None;
+                    let mut best_target_index: usize = 0;
                     let mut best_score: f32 = 0.0;
                     let mut best_weapon: &Option<WeaponInfo> = &None;
 
-                    for j in 0..g2.len(){
+                    for j in 0..g2.len() {
                         let other: &CombatUnit = &g2[j];
-                        let other_data: &UnitTypeData =  other.type_data.as_ref().unwrap();
+                        let other_data: &UnitTypeData = other.type_data.as_ref().unwrap();
 
                         let air_dps2: f32 = other.get_dps(true);
                         let ground_dps2: f32 = other.get_dps(false);
 
-                        let dps: f32 = if air_dps2 > ground_dps2 {air_dps2} else {ground_dps2};
-                        let mut score: f32 = dps * self.target_score(other, if group ==0{has_ground1 != 0} else {has_ground2 != 0},if group ==0{has_air1 != 0} else {has_air2 != 0} ) * 0.001;
-                        if is_unit_melee{
-                            if combat_settings.enable_surround_limits && melee_unit_attack_count[j] >= surround.max_attackers_per_defender{
+                        let dps: f32 = if air_dps2 > ground_dps2 { air_dps2 } else { ground_dps2 };
+                        let mut score: f32 = dps * self.target_score(other, if group == 0 { has_ground1 != 0 } else { has_ground2 != 0 }, if group == 0 { has_air1 != 0 } else { has_air2 != 0 }) * 0.001;
+                        if is_unit_melee {
+                            if combat_settings.enable_surround_limits && melee_unit_attack_count[j] >= surround.max_attackers_per_defender {
                                 continue
                             }
 
-                            if !combat_settings.bad_micro && combat_settings.assume_reasonable_positioning{
+                            if !combat_settings.bad_micro && combat_settings.assume_reasonable_positioning {
                                 score = -score;
                             }
-                            if combat_settings.enable_melee_blocking && other.is_melee(){
+                            if combat_settings.enable_melee_blocking && other.is_melee() {
                                 score += 1000.00;
-                            }
-                            else if combat_settings.enable_melee_blocking && unit_type_data.get_movement_speed() < 1.05 * other_data.get_movement_speed(){
+                            } else if combat_settings.enable_melee_blocking && unit_type_data.get_movement_speed() < 1.05 * other_data.get_movement_speed() {
                                 score += 500.00;
                             }
-
-                        }
-                        else{
-                            if !unit.is_flying{
+                        } else {
+                            if !unit.is_flying {
                                 let range_diff: f32 = other.get_attack_range() - unit.get_attack_range();
-                                if opponent_fraction_melee_units > 0.5 && range_diff > 0.5{
+                                if opponent_fraction_melee_units > 0.5 && range_diff > 0.5 {
                                     score -= 1000.00;
-
-                                }
-                                else if opponent_fraction_melee_units > 0.3 && range_diff > 1.0{
+                                } else if opponent_fraction_melee_units > 0.3 && range_diff > 1.0 {
                                     score -= 1000.00
                                 }
                             }
                         }
-                        if best_target.is_none()|| score > best_score{
-                            best_score = score;
-                            best_target = Some(g2[j].clone());
-                            best_target_index = j as i32;
-                            best_weapon = if ground_dps > air_dps {&unit.ground_weapons} else {&unit.air_weapons} /*TODO: Implement air_weapons and ground_weapons for CombatUnit*/
 
-                        }
-                        if score == best_score && unit.health + unit.shield < best_target.clone().unwrap().health + best_target.clone().unwrap().shield{
-                            best_score = score;
-                            best_target = Some(g2[j].clone());
-                            best_target_index = j as i32;
-                            best_weapon = if ground_dps > air_dps {&unit.ground_weapons} else {&unit.air_weapons}
-                        }
-                    }
-                    if best_target.is_some() {
-                        if is_unit_melee{
-                            num_melee_units_used += 1;
-                        }
-                        melee_unit_attack_count[best_target_index as usize]+= 1;
-
-                        let best_weapon_splash: f32 = best_weapon.as_ref().unwrap().splash;
-                        let mut remaining_splash: f32 = if best_weapon_splash > 1.0 {best_weapon_splash} else {1.0};
-
-                        let mut other: CombatUnit = best_target.unwrap();
-                        changed = true;
-                        let mut rng = rand::thread_rng();
-
-
-
-                        let val: f32 = rng.gen();
-
-                        if debug{
-                            println!("Uniform distribution chose {:?}", val);
+                        match best_target{
+                            None => {
+                                if score > best_score{
+                                    best_score = score;
+                                    best_target = Some(other);
+                                    best_target_index = j;
+                                    best_weapon = if ground_dps > air_dps { &unit.ground_weapons } else { &unit.air_weapons }
+                                }
+                            },
+                            Some(t) => {
+                            if score == best_score && unit.health + unit.shield < t.health + t.shield{
+                                best_score = score;
+                                best_target = Some(other);
+                                best_target_index = j;
+                                best_weapon = if ground_dps > air_dps { &unit.ground_weapons } else { &unit.air_weapons }
                             }
-
-                        let shielded: bool = !is_unit_melee && val < guardian_shield_unit_fraction[1-group];
-                        let dps: f32 = best_weapon.as_ref().unwrap().get_dps() * if remaining_splash > 1.0 {1.0} else {remaining_splash};
-                        let damage_multiplier: f32 = 1.0;
-
-
-                        /*Insert Carrier Code*/
-                        other.modify_health(-dps*damage_multiplier*dt);
-
-                        if other.health ==0.0{
-                            g2[best_target_index as usize] = g2.last().unwrap().clone();
-                            melee_unit_attack_count[best_target_index as usize] = melee_unit_attack_count.last().unwrap().clone();
-                            g2.pop();
-                            melee_unit_attack_count.pop();
-                            best_target = None;
-
-                        }
-                        remaining_splash -= 1.0;
-
-                        if combat_settings.enable_splash{
-                            if debug{
-                            println!("Splash!")
                             }
-                            /*TODO: SPLASH*/
                         }
-
+//                        if best_target.is_none() || score > best_score {
+//                            best_score = score;
+//                            best_target = Some(other);
+//                            best_target_index = j as i32;
+//                            best_weapon = if ground_dps > air_dps { &unit.ground_weapons } else { &unit.air_weapons }
+//                        }
+//                        let _best_target = best_target.unwrap();
+//
+//                            if score == best_score && unit.health + unit.shield < _best_target.health + _best_target.shield {
+//                                best_score = score;
+//                                best_target = Some(other);
+//                                best_target_index = j as i32;
+//                                best_weapon = if ground_dps > air_dps { &unit.ground_weapons } else { &unit.air_weapons }
+//                            }
+//
                     }
 
+
+                        if !best_target.is_none() {
+                            if is_unit_melee {
+                                num_melee_units_used += 1;
+                            }
+                            melee_unit_attack_count[best_target_index] += 1;
+
+                            let best_weapon_splash: f32 = best_weapon.as_ref().unwrap().splash;
+                            let mut remaining_splash: f32 = if best_weapon_splash > 1.0 { best_weapon_splash } else { 1.0 };
+
+                            let other: &mut CombatUnit = g2[best_target_index].borrow_mut();
+                            changed = true;
+                            let mut rng = rand::thread_rng();
+                            let val: f32 = rng.gen();
+
+                            if debug {
+                                println!("Uniform distribution chose {:?}", val);
+                            }
+
+                            let shielded: bool = !is_unit_melee && val < guardian_shield_unit_fraction[1 - group];
+                            let dps: f32 = best_weapon.as_ref().unwrap().get_dps() * if remaining_splash > 1.0 { 1.0 } else { remaining_splash };
+                            let damage_multiplier: f32 = 1.0;
+
+
+                            other.modify_health(-dps * damage_multiplier * dt);
+
+                            if other.health == 0.0 {
+                                let last_element: usize = g2.len()-1;
+                                g2.swap(best_target_index, last_element);
+//                                g2[best_target_index as usize] = g2.last().unwrap().clone();
+                                melee_unit_attack_count[best_target_index] = melee_unit_attack_count.last().unwrap().clone();
+                                g2.pop();
+                                melee_unit_attack_count.pop();
+                                best_target = None;
+                            }
+                        }
+
+//                            remaining_splash -= 1.0;
                 }
-                if debug{
+
+
+                if combat_settings.enable_splash {
+                    if debug {
+                        println!("Splash!")
+                    }
+                    /*TODO: SPLASH*/
+                }
+
+                if debug {
                     println!("Melee attackers used: {:?} did change in the last iteration {:?}", num_melee_units_used, changed);
                 }
-
             }
+
             time += dt;
-            if time > combat_settings.max_time{
+            if time > combat_settings.max_time {
                 break;
             }
-
         }
+
+
         average_health_by_time[0] /= if average_health_by_time_weight[0] > 0.01 {average_health_by_time_weight[0]} else {0.01};
         average_health_by_time[1] /= if average_health_by_time_weight[1] > 0.01 {average_health_by_time_weight[1]} else {0.01};
 
@@ -466,12 +483,13 @@ impl CombatPredictor{
 //        for y in units2.into_iter(){
 //            total_health2 += y.health;
 //            }
-        if total_health1 > total_health2{
-            Ok(1)
-        }
-        else{
-            Ok(2)
-        }
+//        if total_health1 > total_health2{
+//            Ok(1)
+//        }
+//        else{
+//            Ok(2)
+//        }
+        Ok(1)
     }
     pub fn target_score(&self, unit: &CombatUnit, has_ground:bool, has_air:bool)->f32{
         const VESPENE_MULTIPLIER: f32 = 1.5;
