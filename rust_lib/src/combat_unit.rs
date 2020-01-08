@@ -53,7 +53,7 @@ pub const IS_UPGRADE_WITH_LEVELS: [UpgradeId; 15] =[
     UpgradeId::TERRANVEHICLEANDSHIPARMORSLEVEL1];
 
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CombatUnit {
     #[pyo3(get,set)]
     pub owner: i32,
@@ -137,12 +137,12 @@ impl CombatUnit{
 }
 impl CombatUnit{
     pub fn can_be_attacked_by_air_weapons(&self)-> bool{
-        return self.is_flying || self.unit_type == UnitTypeId::COLOSSUS;
+        self.is_flying || self.unit_type == UnitTypeId::COLOSSUS
     }
 
     pub fn get_movement_speed(&self)->f32{
 //        let movement_speed =;
-        return self.type_data.as_ref().unwrap().get_movement_speed()
+        self.type_data.as_ref().unwrap().get_movement_speed()
     }
     pub fn get_radius(&self)->f32{
         self.tech_data.as_ref().unwrap().radius.into()
@@ -155,7 +155,7 @@ impl CombatUnit{
                 range = w.get_range();
             }
         }
-        return range
+        range
     }
 
     pub fn get_name(&self)-> &str{
@@ -202,8 +202,14 @@ impl CombatUnit{
             None => 0.0,
             Some(t) => t.get_dps()
         };
+        if air{
+            air_weapon_dps
+        }
+        else{
+            ground_weapon_dps
+        }
 
-        return  if ground_weapon_dps > air_weapon_dps {ground_weapon_dps} else {air_weapon_dps};
+//        if ground_weapon_dps > air_weapon_dps {ground_weapon_dps} else {air_weapon_dps}
     }
 
     pub fn modify_health(&mut self, mut delta: f32){

@@ -22,18 +22,24 @@ def test_data():
     cp = sh.CombatPredictor(_game_info=dc, path="C:\\Users\\danie\\Desktop\\Combat Simulator\\sc2-techtree\\data\\data_readable.json")
     end_time1 = time.time()
     print(end_time1-start_time2)
-    cu = sp.CombatUnit(unit=None,owner=1,type=UnitTypeId.MARINE,health=100.0,flying=False)
-
     
-    cus = [cu.to_rust() for _ in range(2)]
+
+    cu = sp.CombatUnit(unit=None, owner=1, type=UnitTypeId.MARINE, health=45.0, flying=False)
+    cu2 = sp.CombatUnit(unit=None,owner=2, type=UnitTypeId.HYDRALISK,health=90.0,flying=False)
+    cus = [cu.to_rust() for _ in range(4)]
+    cus2 = [cu2.to_rust() for _ in range(2)]
     cs = sp.CombatSettings()
     cs.debug = False
-    start_time2=time.time()
-    # cp.units1 = cus
-    # cp.units2 = cus
-    cp.predict_engage(cus, cus, 1,cs)
-    end_time1 = time.time()
-    print(end_time1-start_time2)
+    
+    for x in range(1):
+        start_time2=time.time()
+        # cp.units1 = cus
+        # cp.units2 = cus
+        w = cp.predict_engage(cus, cus2, 1, cs)
+
+        end_time1 = time.time()
+        print(end_time1-start_time2)
+        print("Winner = ", w)
 
 
 
@@ -99,6 +105,7 @@ from data_caching import DataCache
 # from simulator_python import CombatPredictor, CombatUnit
 import simulator_python as sp
 import time
+
 def save_data():   
 
     class TestBot(sc2.BotAI):
@@ -133,4 +140,76 @@ def save_data():
 # save_data()
 # dc = DataCache()
 # save_data()
-test_data()
+def test_predictor():
+
+    class TestBot(sc2.BotAI):
+        def __init__(self):
+            self.combat_predictor = None
+            self.dc = None
+            self.combat_predictor = None
+            self.combat_settings = sp.CombatSettings()
+
+        async def micro(self):
+            # enemy_combat_units = [sp.CombatUnit(unit=x).to_rust() for x in self.enemy_units]
+            # my_units = [sp.CombatUnit(unit=x).to_rust() for x in self.units]
+            enemy_units = []
+            my_units = []
+            attack_units = []
+            for unit in self.units:
+                close_enemies = self.enemy_units.closer_than(10, unit)
+                if close_enemies:
+                    my_units.append(sp.CombatUnit(unit=unit).to_rust())
+                    attack_units.append(unit)
+                    close_allies = self.units.closer_than(10, unit)
+                    
+                    for enemy_unit in close_enemies:
+                        enemy_units.append(sp.CombatUnit(unit=enemy_unit).to_rust())
+                    
+                    for close_ally in close_allies:
+                        my_units.append(sp.CombatUnit(unit=close_ally).to_rust())
+                        attack_units.append(close_ally)
+            
+            if my_units and enemy_units:
+                if self.combat_predictor.predict_engage(my_units, enemy_units, 1, self.combat_settings) == 1:
+                    for unit in attack_units:
+                        p = self.enemy_units.closest_to(unit)
+                        if p:
+                            self.do(unit.attack(p))
+                else:
+                    for unit in attack_units:
+                        self.do(unit.move(self.start_location))
+
+
+        async def on_step(self, iteration):
+            
+            if iteration ==0:
+                self.dc = DataCache(self)
+                self.combat_predictor = sh.CombatPredictor(_game_info=self.dc, path="C:\\Users\\danie\\Desktop\\Combat Simulator\\sc2-techtree\\data\\data_readable.json")
+                self.combat_settings.debug = False
+                for x in self.workers:
+                    self.do(x.attack(self.enemy_start_locations[0]))
+
+            if self.enemy_units:
+                await self.micro()
+
+                # enemy_combat_units = [sp.CombatUnit(unit=x).to_rust() for x in self.enemy_units]
+                # my_units = [sp.CombatUnit(unit=x).to_rust() for x in self.units]
+                # winner = self.combat_predictor.predict_engage(my_units, enemy_combat_units,1, self.combat_settings)
+                # await self.chat_send(str(winner))
+            
+
+
+                
+
+
+
+    def main():
+        sc2.run_game(
+            sc2.maps.get("AutomatonLE"),
+            [Bot(Race.Terran, TestBot()),  Computer(Race.Random, Difficulty.VeryEasy)],
+            realtime=False,
+        )
+    main()
+
+# test_data()
+test_predictor()

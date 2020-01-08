@@ -85,12 +85,12 @@ pub struct DamageBonus {
 
 impl DamageBonus {
     /// Affected attribute.
-    pub fn get_attribute(&self) -> Attribute {
+    pub fn get_attribute(self) -> Attribute {
         self.attribute
     }
 
     /// Damage bonus.
-    pub fn get_bonus(&self) -> f32 {
+    pub fn get_bonus(self) -> f32 {
         self.bonus
     }
 }
@@ -185,69 +185,7 @@ impl<'source> FromPyObject<'source> for Race{
 		Ok(x).into_py_result()
 	}
 }
-//
-//#[derive(Debug, Clone)]
-//pub struct UnitTypeDataProto{
-//    ability_id: i32,
-//    armor: f62,
-//    attributes: Vec<i32>,
-//    available: bool,
-//    build_time: f62,
-//    cargo_size: i32,
-//    food_provided: f62,
-//    food_required: f62,
-//    has_minerals: bool,
-//    has_vespene: bool,
-//    mineral_cost: i32,
-//    movement_speed: f62,
-//    name: String,
-//    race: i32,
-//    require_attached: bool,
-//    sight_range: f62,
-//    tech_alias: Vec<i32>,
-//    tech_requirement: i32,
-//    unit_alias: i32,
-//    unit_id: i32,
-//    vespene_cost: i32,
-//    weapons: Vec<Weapon>
-//
-//}
-//
-//impl<'source> FromPyObject<'source> for UnitTypeData {
-//    fn extract(ob: &'source PyAny) -> PyResult<Self> {
-//        println!("{:?}", "Extracting UnitTypeData");
-//        unsafe {
-//            let py = Python::assume_gil_acquired();
-//            let obj = ob.to_object(py);
-//            let proto: UnitTypeDataProto = obj.getattr(py, "_proto")?.extract(py)?;
-//            println!("{:?}", "Id extracted");
-//
-//            Ok(Self {
-//                unit_type: obj.getattr(py, "id")?.extract(py)?,
-//                name: obj.getattr(py, "name")?.extract(py)?,
-//                available: obj.getattr(py, "_proto.available")?.extract(py)?,
-//                cargo_size: obj.getattr(py, "cargo_size")?.extract(py)?,
-//                mineral_cost: obj.getattr(py, "_proto.mineral_cost")?.extract(py)?,
-//                vespene_cost: obj.getattr(py, "_proto.vespene_cost")?.extract(py)?,
-//                attributes: obj.getattr(py, "_proto.attributes")?.extract(py)?,
-//                movement_speed: obj.getattr(py, "_proto.movement_speed")?.extract(py)?,
-//                armor: obj.getattr(py, "_proto.armor")?.extract(py)?,
-//                weapons: obj.getattr(py, "_proto.weapons")?.extract(py)?,
-//                food_required: obj.getattr(py, "_proto.food_required")?.extract(py)?,
-//                food_provided: obj.getattr(py, "_proto.food_provided")?.extract(py)?,
-//                ability: obj.getattr(py, "_proto.ability_id")?.extract(py)?,
-//                race: obj.getattr(py, "_proto.race")?.extract(py)?,
-//                build_time: obj.getattr(py, "_proto.build_time")?.extract(py)?,
-//                has_minerals: obj.getattr(py, "_proto.has_minerals")?.extract(py)?,
-//                has_vespene: obj.getattr(py, "_proto.has_vespene")?.extract(py)?,
-//                tech_alias: obj.getattr(py, "_proto.tech_alias")?.extract(py)?,
-//                unit_alias: obj.getattr(py, "_proto.unit_alias")?.extract(py)?,
-//                tech_requirement: obj.getattr(py, "_proto.tech_requirement")?.extract(py)?,
-//                require_attached: obj.getattr(py, "_proto.require_attached")?.extract(py)?
-//            })
-//        }
-//    }
-//}
+
 #[derive(Debug, Clone)]
 pub struct UnitTypeData {
     unit_type: UnitTypeId,
@@ -436,7 +374,7 @@ impl Weapon {
         self.speed
     }
     pub fn get_dps(&self)-> f32{
-        return self.attacks as f32 / self.speed
+        self.attacks as f32 / self.speed
     }
 }
 
@@ -507,9 +445,10 @@ impl WeaponInfo{
     }
 
     pub fn get_dps(&self)->f32{
-        return  self.weapon.get_dps()
+        self.weapon.get_dps()
 
     }
+
     pub fn set_weapon(&mut self,
                       _target_type: WeaponTargetType,
                       _damage: f32,
@@ -1000,7 +939,6 @@ pub fn get_damage_bonus(unit: UnitTypeId, upgrades:&CombatUpgrades, _data: &Unit
         }
         Race::TERRAN => { //TODO: Figure out mech and bio
             let mechanical: A = Attribute::MECHANICAL.to_tt();
-            let biological: A = Attribute::BIOLOGICAL.to_tt();
             if _tech_tree.is_flying{
                 if upgrades.has_upgrade(UpgradeId::TERRANSHIPWEAPONSLEVEL1){
                         bonus += 1;
@@ -1040,7 +978,7 @@ pub fn get_damage_bonus(unit: UnitTypeId, upgrades:&CombatUpgrades, _data: &Unit
 
         _ => println!("Unknown Race for {:?}", unit)
     }
-    return  bonus
+    bonus
     }
 
 
@@ -1132,7 +1070,7 @@ pub fn get_armor_bonus(unit: UnitTypeId, upgrades: &CombatUpgrades, _data: &Unit
 
         _ => println!("Unknown Race for {:?}", unit)
     }
-    return bonus
+    bonus
 }
 #[derive(Clone, Hash)]
 pub struct CombatUpgrades(Vec<UpgradeId>);
@@ -1185,7 +1123,7 @@ pub fn calculate_dps(attacker: UnitTypeId, target: UnitTypeId, weapon: &Weapon, 
         }
     }
 
-    return 0.0;
+     0.0
 }
 
 pub fn can_be_attacked_by_air_weapons(unit: UnitTypeId, tech_tree: &TechData)->bool{

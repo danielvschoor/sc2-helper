@@ -553,13 +553,13 @@ def max_surround(enemy_ground_unit_area: float, enemy_ground_units: int, unit_ra
 
 class CombatUnit(Unit):
     def __init__(self, unit=None,owner=None,type=None, health=None, flying=None, data_cache=None):
-        self.cache = {}
-        if not data_cache:
-            data_cache = DataCache
-        self.data_cache = DataCache()
+        # self.cache = {}
+        # if not data_cache:
+        #     data_cache = DataCache
+        # self.data_cache = DataCache()
         
-        self._data = None
-        self._data_dict = None
+        # self._data = None
+        # self._data_dict = None
         if unit:
             self._proto = unit._proto
             self._bot_object = unit._bot_object
@@ -598,17 +598,17 @@ class CombatUnit(Unit):
         
         # self._data = self.data_cache.get_unit_data(self._type)
     
-    @property
-    def data(self):
-        if not self._data:
-            self._data = self.data_cache.get_unit_data(self._type) 
-        return self._data
+    # @property
+    # def data(self):
+    #     if not self._data:
+    #         self._data = self.data_cache.get_unit_data(self._type) 
+    #     return self._data
     
-    @property
-    def data_dict(self):
-        if not self._data_dict:
-            self._data_dict = self.data_cache.get_data_as_dict(self._type)
-        return self._data_dict
+    # @property
+    # def data_dict(self):
+    #     if not self._data_dict:
+    #         self._data_dict = self.data_cache.get_data_as_dict(self._type)
+    #     return self._data_dict
 
     @property
     def owner(self):
@@ -693,19 +693,6 @@ class CombatUnit(Unit):
                     _flying=self.is_flying, 
                     _buff_timer=self.buff_timer)
 
-    def modify_health(self, delta):
-        if delta < 0:
-            delta = -delta
-            self.shield = -delta
-            if self.shield < 0:
-                delta = -self.shield
-                self.shield = 0
-                self.health = max(0, self.health-delta)
-        else:
-            self.health += delta
-            self.health = min(self.health, self.health_max)
-        
-        return self
 
 def make_unit(owner:int, type:UnitTypeId, tech_tree=None):
     if not tech_tree:

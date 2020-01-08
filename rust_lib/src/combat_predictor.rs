@@ -11,6 +11,8 @@ use rand::{thread_rng};
 use std::borrow::{Borrow, BorrowMut};
 use std::f32::consts::PI;
 use rand::{Rng};
+use std::f32::EPSILON;
+use stopwatch::Stopwatch;
 
 
 //const PI: f32 = 3.141592653589793238462643383279502884;
@@ -47,7 +49,7 @@ pub fn max_surround(mut enemy_ground_unit_area: f32, enemy_ground_units: i32, ze
     };
 
     let max_melee_attackers:i32 = approximate_attackers_in_melee_range.ceil() as i32;
-    return SurroundInfo{max_attackers_per_defender: max_attackers_per_defender, max_melee_attackers:max_melee_attackers}
+    SurroundInfo{max_attackers_per_defender, max_melee_attackers}
 }
 
 pub struct CombatSettings{
@@ -122,6 +124,7 @@ impl CombatPredictor{
 
 
     fn predict_engage(&mut self, mut _units1: Vec<&CombatUnit>, mut _units2: Vec<&CombatUnit>, defender_player:u32, settings: Option<CombatSettings>)->PyResult<u32>{
+//        let sw = Stopwatch::start_new();
         let combat_settings: CombatSettings = match settings{
             None => CombatSettings{
                 bad_micro: false,
@@ -150,17 +153,20 @@ impl CombatPredictor{
 
         units1.shuffle(&mut rng);
         units2.shuffle(&mut rng);
+
+
         for u in &mut units1{
             u.load_data(self.data.borrow(), self.tech_data.borrow())
         }
         for u in &mut units2{
             u.load_data(self.data.borrow(), self.tech_data.borrow())
         }
+//        println!("Load data took {:?}", sw.elapsed_ms());
         let mut average_health_by_time: Vec<f32> = vec![0.0,0.0];
         let mut average_health_by_time_weight: Vec<f32> = vec![0.0, 0.0];
         let mut max_range_defender: f32 = 0.0;
         let mut fastest_attacker_speed: f32 = 0.0;
-
+//        let sw = Stopwatch::start_new();
         if defender_player ==1 || defender_player ==2{
             for u in if defender_player == 1 {&units1} else {&units2}{
                 if u.get_attack_range() > max_range_defender{
@@ -173,6 +179,7 @@ impl CombatPredictor{
                 }
             }
         }
+//        println!("get_attack_range took {:?}", sw.elapsed_ms());
         let mut time: f32 = combat_settings.start_time;
         let mut changed :bool = true;
         const MAX_ITERATIONS: u32=100;
@@ -184,6 +191,7 @@ impl CombatPredictor{
                 u.buff_timer = 0.0;
             }
         }
+//        let sw = Stopwatch::start_new();
         for it in 0..MAX_ITERATIONS {
             if !changed {
                 break;
@@ -222,11 +230,7 @@ impl CombatPredictor{
             let surround_info2: SurroundInfo = max_surround(ground_area1 * PI, has_ground1, zealot_radius.into());
 
             let dt: f32;
-            if 5 < 1 + (it / 10) {
-                dt = 5 as f32;
-            } else {
-                dt = (1 + (it / 10)) as f32;
-            }
+            let dt = if 5 < 1 + (it / 10) { 5_f32 } else { (1 + (it / 10)) as f32 };
             if debug {
                 println!("Iteration: {:?} Time:  {:?}", it, time);
             }
@@ -259,24 +263,14 @@ impl CombatPredictor{
             }
 //            let mut group_units: Vec<Vec<CombatUnit>> = vec![units1, units2];
             for group in 0..2 {
-
+                if debug {
+                    println!("Processing group {:?}", group);
+                }
                 let (g1, g2) = match group {
                     0 => (&mut units1, &mut units2),
                     1 => (&mut units2, &mut units1),
                     _ => unreachable!(),
                 };
-
-//
-//                let g1 = match group{
-//                    0 => &mut units1,
-//                    1 => &mut units2,
-//                };
-//                let g2 = match group{
-//                    0 => &mut units2,
-//                    1 => &mut units1,
-//                };
-//                let mut g1: &Vec<CombatUnit> = if group == 0 {&units1} else {&units2};
-//                let mut g2: &Vec<CombatUnit> = if group == 0 {&units2} else {&units1};
 
                 let surround: SurroundInfo = if group == 0 { surround_info1 } else { surround_info2 };
 
@@ -292,9 +286,11 @@ impl CombatPredictor{
                         opponent_fraction_melee_units += 1.0;
                     }
                 }
-                if g2.len() > 0 {
+
+                if !g2.is_empty() {
                     opponent_fraction_melee_units /= g2.len() as f32;
                 }
+
                 let has_been_healed: Vec<bool> = vec![false; g2.len()];
                 let mut melee_unit_attack_count: Vec<i32> = vec![0; g2.len()];
 //                let melee_units_in_attack_range: Vec<i32> = vec![0; g2.len()];
@@ -303,9 +299,7 @@ impl CombatPredictor{
                     println!("Max melee attackers: {:?} {:?} num units: {:?}", surround.max_melee_attackers, surround.max_attackers_per_defender, g1.len())
                 }
 
-                for i in 0..g1.len() {
-                    let unit = &g1[i];
-
+                for unit in g1 {
                     if unit.health == 0.0 {
                         continue
                     }
@@ -315,7 +309,7 @@ impl CombatPredictor{
                     let ground_dps = unit.get_dps(false);
 
                     if debug {
-                        println!("Processing {:?}, health: {:?}, shield: {:?}, energy: {:?}", unit.get_name(), unit.health, unit.shield, unit.energy);
+                        println!("Processing {:?}, health: {:?}, shield: {:?}, energy: {:?}, ground_dps: {:?}, air_dps: {:?}", unit.get_name(), unit.health, unit.shield, unit.energy, ground_dps, air_dps);
                     }
 
                     /*
@@ -326,14 +320,17 @@ impl CombatPredictor{
                         continue
                     }
 
+
                     if combat_settings.workers_do_no_damage && unit.is_basic_harvester() {
                         continue
                     }
+
                     let is_unit_melee: bool = unit.is_melee();
 
                     if is_unit_melee && combat_settings.enable_surround_limits && num_melee_units_used > surround.max_melee_attackers {
                         continue
                     }
+
 
                     /*INSERT TIMING ADJUSTMENT HERE*/
 
@@ -351,6 +348,7 @@ impl CombatPredictor{
 
                         let dps: f32 = if air_dps2 > ground_dps2 { air_dps2 } else { ground_dps2 };
                         let mut score: f32 = dps * self.target_score(other, if group == 0 { has_ground1 != 0 } else { has_ground2 != 0 }, if group == 0 { has_air1 != 0 } else { has_air2 != 0 }) * 0.001;
+
                         if is_unit_melee {
                             if combat_settings.enable_surround_limits && melee_unit_attack_count[j] >= surround.max_attackers_per_defender {
                                 continue
@@ -381,37 +379,23 @@ impl CombatPredictor{
                                     best_score = score;
                                     best_target = Some(other);
                                     best_target_index = j;
-                                    best_weapon = if ground_dps > air_dps { &unit.ground_weapons } else { &unit.air_weapons }
+                                    best_weapon = if ground_dps > air_dps { &unit.ground_weapons } else { &unit.air_weapons };
                                 }
                             },
                             Some(t) => {
-                            if score == best_score && unit.health + unit.shield < t.health + t.shield{
-                                best_score = score;
-                                best_target = Some(other);
-                                best_target_index = j;
-                                best_weapon = if ground_dps > air_dps { &unit.ground_weapons } else { &unit.air_weapons }
-                            }
+                                if (score - best_score).abs() < EPSILON && unit.health + unit.shield < t.health + t.shield{
+                                    best_score = score;
+                                    best_target = Some(other);
+                                    best_target_index = j;
+                                    best_weapon = if ground_dps > air_dps { &unit.ground_weapons } else { &unit.air_weapons }
+                                }
                             }
                         }
-//                        if best_target.is_none() || score > best_score {
-//                            best_score = score;
-//                            best_target = Some(other);
-//                            best_target_index = j as i32;
-//                            best_weapon = if ground_dps > air_dps { &unit.ground_weapons } else { &unit.air_weapons }
-//                        }
-//                        let _best_target = best_target.unwrap();
-//
-//                            if score == best_score && unit.health + unit.shield < _best_target.health + _best_target.shield {
-//                                best_score = score;
-//                                best_target = Some(other);
-//                                best_target_index = j as i32;
-//                                best_weapon = if ground_dps > air_dps { &unit.ground_weapons } else { &unit.air_weapons }
-//                            }
-//
+
                     }
 
 
-                        if !best_target.is_none() {
+                        if best_target.is_some() {
                             if is_unit_melee {
                                 num_melee_units_used += 1;
                             }
@@ -425,22 +409,22 @@ impl CombatPredictor{
                             let mut rng = rand::thread_rng();
                             let val: f32 = rng.gen();
 
-                            if debug {
-                                println!("Uniform distribution chose {:?}", val);
-                            }
 
                             let shielded: bool = !is_unit_melee && val < guardian_shield_unit_fraction[1 - group];
                             let dps: f32 = best_weapon.as_ref().unwrap().get_dps() * if remaining_splash > 1.0 { 1.0 } else { remaining_splash };
                             let damage_multiplier: f32 = 1.0;
-
-
+                            if debug{
+                            println!("Modify health of {:?}, current health={:?}, delta={:?}",other.get_name(), other.health, -dps * damage_multiplier * dt);
+                            }
                             other.modify_health(-dps * damage_multiplier * dt);
-
+                            if debug {
+                                println!("Health of unit after modification ={:?}", other.health);
+                            }
                             if other.health == 0.0 {
                                 let last_element: usize = g2.len()-1;
                                 g2.swap(best_target_index, last_element);
 //                                g2[best_target_index as usize] = g2.last().unwrap().clone();
-                                melee_unit_attack_count[best_target_index] = melee_unit_attack_count.last().unwrap().clone();
+                                melee_unit_attack_count[best_target_index] = *melee_unit_attack_count.last().unwrap();
                                 g2.pop();
                                 melee_unit_attack_count.pop();
                                 best_target = None;
@@ -469,7 +453,7 @@ impl CombatPredictor{
             }
         }
 
-
+//        println!("Main loop took {:?}", sw.elapsed_ms());
         average_health_by_time[0] /= if average_health_by_time_weight[0] > 0.01 {average_health_by_time_weight[0]} else {0.01};
         average_health_by_time[1] /= if average_health_by_time_weight[1] > 0.01 {average_health_by_time_weight[1]} else {0.01};
 
@@ -489,8 +473,31 @@ impl CombatPredictor{
 //        else{
 //            Ok(2)
 //        }
-        Ok(1)
+        let mut total_health1:f32 = 0.0;
+        let mut total_health2:f32 = 0.0;
+        for u in &units1{
+            total_health1 += (u.health + u.shield)
+        }
+        for u in &units2{
+            total_health2 += (u.health + u.shield)
+        }
+
+        if total_health1 > total_health2{
+            if debug {
+                println!("Player 1 wins with health={:?}", total_health1);
+            }
+            Ok(1)
+
+        }
+        else{
+            if debug {
+                println!("Player 2 wins with health={:?}", total_health2);
+            }
+            Ok(2)
+        }
+
     }
+
     pub fn target_score(&self, unit: &CombatUnit, has_ground:bool, has_air:bool)->f32{
         const VESPENE_MULTIPLIER: f32 = 1.5;
 
@@ -504,13 +511,7 @@ impl CombatPredictor{
 
         score += 1000.00 * if air_dps > ground_dps {air_dps} else {ground_dps};
 
-        if !has_ground && air_dps ==0.0{
-            score *= 0.01;
-        }
-        else if !has_air && ground_dps ==0.0{
-            score *= 0.01;
-        }
-        else if air_dps ==0.0 && ground_dps == 0.0{
+        if !has_air && ground_dps ==0.0 || !has_ground && air_dps ==0.0{
             score *= 0.01;
         }
         score
