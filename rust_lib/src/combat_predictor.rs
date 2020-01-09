@@ -13,6 +13,7 @@ use std::f32::consts::PI;
 use rand::{Rng};
 use std::f32::EPSILON;
 use stopwatch::Stopwatch;
+use std::any::Any;
 
 
 //const PI: f32 = 3.141592653589793238462643383279502884;
@@ -116,15 +117,17 @@ impl CombatPredictor{
 
         };
 
-        obj.init(CombatPredictor{
+        obj.init(CombatPredictor {
             data: _game_info,
             tech_data: td
-        })
+        }
+        )
      }
 
 
     fn predict_engage(&mut self, mut _units1: Vec<&CombatUnit>, mut _units2: Vec<&CombatUnit>, defender_player:u32, settings: Option<CombatSettings>)->PyResult<u32>{
 //        let sw = Stopwatch::start_new();
+        self.data.load_available_units();
         let combat_settings: CombatSettings = match settings{
             None => CombatSettings{
                 bad_micro: false,
@@ -146,20 +149,40 @@ impl CombatPredictor{
         let mut units2: Vec<CombatUnit>  =  clone_vec(std::mem::replace(&mut _units2, Vec::<&CombatUnit>::new()));
 
         let debug: bool = combat_settings.debug;
+
         let zealot_radius = self.tech_data.unittype(UnitTypeId::ZEALOT.to_tt()).unwrap().radius;
 
-        let mut temporary_units: Vec<CombatUnit> = Vec::<CombatUnit>::new();
+        let temporary_units: Vec<CombatUnit> = Vec::<CombatUnit>::new();
         let mut rng = thread_rng();
 
         units1.shuffle(&mut rng);
         units2.shuffle(&mut rng);
 
+        if debug{
+            println!("Loading data");
+        }
+//        let sw = Stopwatch::start_new();
+        let mut unit_types_scope: Vec<UnitTypeId> = vec![];
+        for u in &units1{
+            if !unit_types_scope.contains(&u.unit_type) {
+                unit_types_scope.push(u.unit_type)
+            }
+        }
+        for u in &units2{
+            if !unit_types_scope.contains(&u.unit_type) {
+                unit_types_scope.push(u.unit_type)
+            }
+        }
 
         for u in &mut units1{
-            u.load_data(self.data.borrow(), self.tech_data.borrow())
+            u.load_data(self.data.borrow(), self.tech_data.borrow(),None,None, &unit_types_scope)
         }
+
         for u in &mut units2{
-            u.load_data(self.data.borrow(), self.tech_data.borrow())
+            u.load_data(self.data.borrow(), self.tech_data.borrow(),None,None,&unit_types_scope)
+        }
+        if debug{
+            println!("Data loaded");
         }
 //        println!("Load data took {:?}", sw.elapsed_ms());
         let mut average_health_by_time: Vec<f32> = vec![0.0,0.0];
@@ -343,8 +366,16 @@ impl CombatPredictor{
                         let other: &CombatUnit = &g2[j];
                         let other_data: &UnitTypeData = other.type_data.as_ref().unwrap();
 
-                        let air_dps2: f32 = other.get_dps(true);
-                        let ground_dps2: f32 = other.get_dps(false);
+                        let air_dps2: f32 = match &unit.air_weapons{
+                            None => 0.0,
+                            Some(t) => t.get_dps(other.unit_type.borrow())
+                        };
+                        let ground_dps2: f32 = match &unit.ground_weapons{
+                            None => 0.0,
+                            Some(t) => t.get_dps(other.unit_type.borrow())
+                        };
+//                        let air_dps2: f32 = unit.air_weapons.get_dps(other.type_id)// other.get_dps(true);
+//                        let ground_dps2: f32 = unit.air_weapons other.get_dps(false);
 
                         let dps: f32 = if air_dps2 > ground_dps2 { air_dps2 } else { ground_dps2 };
                         let mut score: f32 = dps * self.target_score(other, if group == 0 { has_ground1 != 0 } else { has_ground2 != 0 }, if group == 0 { has_air1 != 0 } else { has_air2 != 0 }) * 0.001;
@@ -402,7 +433,7 @@ impl CombatPredictor{
                             melee_unit_attack_count[best_target_index] += 1;
 
                             let best_weapon_splash: f32 = best_weapon.as_ref().unwrap().splash;
-                            let mut remaining_splash: f32 = if best_weapon_splash > 1.0 { best_weapon_splash } else { 1.0 };
+                            let remaining_splash: f32 = if best_weapon_splash > 1.0 { best_weapon_splash } else { 1.0 };
 
                             let other: &mut CombatUnit = g2[best_target_index].borrow_mut();
                             changed = true;
@@ -411,7 +442,7 @@ impl CombatPredictor{
 
 
                             let shielded: bool = !is_unit_melee && val < guardian_shield_unit_fraction[1 - group];
-                            let dps: f32 = best_weapon.as_ref().unwrap().get_dps() * if remaining_splash > 1.0 { 1.0 } else { remaining_splash };
+                            let dps: f32 = best_weapon.as_ref().unwrap().get_dps(&other.unit_type) * if remaining_splash > 1.0 { 1.0 } else { remaining_splash };
                             let damage_multiplier: f32 = 1.0;
                             if debug{
                             println!("Modify health of {:?}, current health={:?}, delta={:?}",other.get_name(), other.health, -dps * damage_multiplier * dt);

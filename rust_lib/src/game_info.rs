@@ -373,6 +373,7 @@ impl Weapon {
     pub fn get_speed(&self) -> f32 {
         self.speed
     }
+
     pub fn get_dps(&self)-> f32{
         self.attacks as f32 / self.speed
     }
@@ -427,25 +428,62 @@ impl<'source> FromPyObject<'source> for Weapon {
 pub struct WeaponInfo{
     weapon: Weapon,
     pub splash: f32,
-    base_dps: f32
+    pub base_dps: f32,
+    dps_cache: Vec<f32>
 }
 
 impl WeaponInfo{
-    pub fn new(_weapon: &Weapon, _type: UnitTypeId, _upgrades: Option<&CombatUpgrades>, _target_upgrades: Option<&CombatUpgrades>, _data: &UnitTypeData, _tech_tree: &UnitType) -> Self{
+    pub fn new(_weapon: &Weapon, _type: UnitTypeId, _upgrades: &CombatUpgrades,
+               _target_upgrades: &CombatUpgrades, _unit_data: &UnitTypeData,
+               _unit_tech_tree: &UnitType, _data: &GameInfo,_tech_tree: &TechData, _unit_types_scope: Option<&Vec<UnitTypeId>> ) -> Self{
+
         let _splash: f32 = 0.0;
-        let bonus_damage: f32 = match _upgrades {
-            None => 0.0,
-            Some(t)=> get_damage_bonus(_type, t, _data,_tech_tree) as f32
+        let bonus_damage: f32 =  get_damage_bonus(_type, _upgrades, _unit_data, _unit_tech_tree) as f32;
+        let unit_types_scope: &Vec<UnitTypeId> = match _unit_types_scope {
+            None =>  _data.get_available_units(),
+            Some(t) => t
         };
         let _base_dps: f32 = _weapon.damage + bonus_damage;
+        let mut _dps_cache: Vec<f32> = vec![];
+
+        for i in 0.._data.unit_data.len() {
+            let target: Option<UnitTypeId> = UnitTypeId::from_usize(i);
+//            println!("Target {:?}", target.is_some());
+
+//            let index: u32 = i as u32;
+//            let available:bool = match _data.unit_data.get(&index){
+//                None => false,
+//                Some(t) => t.available
+//            };
+
+//            let x =_data.unit_data.into_iter().filter(|f|f.1.available).collect();
+
+            if target.is_some() && unit_types_scope.contains(&target.unwrap()){
+                _dps_cache.push(calculate_dps(_type, target.unwrap(),
+                                              _weapon,
+                                              _upgrades,
+                                              _target_upgrades, _data, _tech_tree))
+            }
+            else{
+                _dps_cache.push(0.0);
+            }
+        }
         WeaponInfo{
             weapon: _weapon.clone(),
             splash: _splash,
-            base_dps: _base_dps}
+            base_dps: _base_dps,
+            dps_cache: _dps_cache
+        }
     }
 
-    pub fn get_dps(&self)->f32{
-        self.weapon.get_dps()
+    pub fn get_dps(&self, target: &UnitTypeId)->f32{
+        let target_id: usize = target.to_usize().unwrap();
+        if target_id > self.dps_cache.len(){
+            println!("Unit is not in dps_cache");
+            return self.weapon.get_dps()
+        }
+        let _dps: f32 = self.dps_cache[target_id];
+        return if _dps > 0.0 { _dps} else {0.0}
 
     }
 
@@ -506,7 +544,8 @@ impl<'source> FromPyObject<'source> for WeaponInfo {
                     speed: obj.getattr(py, "_speed")?.extract(py)?
                 },
                 splash: obj.getattr(py, "splash")?.extract(py)?,
-                base_dps: obj.getattr(py, "_base_dps")?.extract(py)?
+                base_dps: obj.getattr(py, "_base_dps")?.extract(py)?,
+                dps_cache: vec![]
             })
         }
     }
@@ -820,11 +859,12 @@ impl<'source> FromPyObject<'source> for UpgradeData {
         }
     }
 }
-
+#[derive(Clone)]
 pub struct GameInfo{
     ability_data: HashMap<u32, AbilityData>,
     unit_data: HashMap<u32, UnitTypeData>,
-    upgrade_data: HashMap<u32, UpgradeData>
+    upgrade_data: HashMap<u32, UpgradeData>,
+    available_units: Vec<UnitTypeId>
 }
 
 impl ToPyObject for GameInfo{
@@ -850,6 +890,7 @@ impl<'source> FromPyObject<'source> for GameInfo {
                 ability_data: obj.getattr(py, "ability_data")?.extract(py)?,
                 unit_data:  obj.getattr(py, "unit_data")?.extract(py)?,
                 upgrade_data: obj.getattr(py, "upgrade_data")?.extract(py)?,
+                available_units: vec![]
             })
         }
     }
@@ -859,6 +900,20 @@ impl GameInfo{
     pub(crate) fn get_unit_data(&self, unit_id: UnitTypeId) -> Option<&UnitTypeData>{
         let id: u32 =  unit_id.to_u32().unwrap();
         self.unit_data.get(id.borrow())
+    }
+    pub fn load_available_units(&mut self){
+
+//            let mut available_units: Vec<UnitTypeId> = vec![];
+            for (_k, v) in self.unit_data.iter().filter(|&(_k, v)| v.available) {
+                if !self.available_units.contains(&v.unit_type) {
+                    self.available_units.push(v.unit_type)
+                }
+            }
+
+    }
+
+    pub fn get_available_units(&self) -> &Vec<UnitTypeId>{
+        &self.available_units
     }
 }
 
@@ -1076,22 +1131,32 @@ pub fn get_armor_bonus(unit: UnitTypeId, upgrades: &CombatUpgrades, _data: &Unit
 pub struct CombatUpgrades(Vec<UpgradeId>);
 
 impl CombatUpgrades{
-    pub fn new(&self, upgrades: Vec<UpgradeId>) -> Self{
+    pub fn new(upgrades: Vec<UpgradeId>) -> Self{
         CombatUpgrades(upgrades)
     }
     pub fn has_upgrade(&self, upgrade: UpgradeId)->bool{
         self.0.contains(&upgrade)
     }
 }
+macro_rules! unwrap_or_return {
+    ( $e:expr ) => {
+        match $e {
+            Some(x) => x,
+            None => return 0.0,
+        }
+    }
+}
 
 
 pub fn calculate_dps(attacker: UnitTypeId, target: UnitTypeId, weapon: &Weapon, attacker_upgrades: &CombatUpgrades, target_upgrades: &CombatUpgrades, _data: &GameInfo,_tech_tree: &TechData) -> f32 {
-    // canBeAttackedByAirWeapons is primarily for coloussus.
-    let target_tech_data: UnitType = _tech_tree.unittype(target.to_tt()).unwrap();
-    let target_game_data: &UnitTypeData = _data.get_unit_data(target).unwrap();
+    // canBeAttackedByAirWeapons is primarily for colossus.
+    let target_tech_data: UnitType = unwrap_or_return!(_tech_tree.unittype(target.to_tt()));
 
-    let attacker_tech_data: UnitType = _tech_tree.unittype(attacker.to_tt()).unwrap();
-    let attacker_game_data: &UnitTypeData = _data.get_unit_data(attacker).unwrap();
+
+    let target_game_data: &UnitTypeData = unwrap_or_return!(_data.get_unit_data(target));
+
+    let attacker_tech_data: UnitType = unwrap_or_return!(_tech_tree.unittype(attacker.to_tt()));
+    let attacker_game_data: &UnitTypeData = unwrap_or_return!(_data.get_unit_data(attacker));
     if weapon.target_type == WeaponTargetType::ANY || if can_be_attacked_by_air_weapons(target, _tech_tree ) {weapon.target_type == WeaponTargetType::AIR}  else {!target_tech_data.is_flying}{
         let mut dmg: f32 = weapon.damage;
 
@@ -1108,7 +1173,12 @@ pub fn calculate_dps(attacker: UnitTypeId, target: UnitTypeId, weapon: &Weapon, 
         // Note: cannot distinguish between damage to shields and damage to health yet, so average out so that the armor is about 0.5 over the whole shield+health of the unit
         // Important only for protoss
         let max_health: f32 = target_tech_data.max_health.into();
-        let max_shield: f32 = target_tech_data.max_shield.unwrap().into();
+
+        let max_shield: f32 = match target_tech_data.max_shield{
+            None=> 0.0,
+            Some(t) => t.into()
+        };
+//        println!("Past max_shield");
         armor = armor * max_health / (max_shield + max_health);
 
         let mut time_between_attacks:f32 = weapon.speed;
@@ -1124,6 +1194,14 @@ pub fn calculate_dps(attacker: UnitTypeId, target: UnitTypeId, weapon: &Weapon, 
     }
 
      0.0
+}
+
+struct CombatEnvironment{
+    upgrades: [CombatUpgrades;2],
+}
+
+impl CombatEnvironment{
+
 }
 
 pub fn can_be_attacked_by_air_weapons(unit: UnitTypeId, tech_tree: &TechData)->bool{

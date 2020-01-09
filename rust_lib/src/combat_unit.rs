@@ -7,6 +7,7 @@ use sc2_techtree::{TechData, UnitType};
 //use std::any::Any;
 //use std::collections::HashSet;
 use std::borrow::Borrow;
+use stopwatch::Stopwatch;
 //use std::cmp::max;
 //use crate::generated_enums::UnitTypeId::WEAPON;
 //use crate::generated_enums::UnitTypeId::WEAPON;
@@ -170,37 +171,74 @@ impl CombatUnit{
         IS_BASIC_HARVESTER.contains(self.unit_type.borrow())
     }
 
-    pub fn load_data(&mut self, data: &GameInfo, tech_tree: &TechData){
+    pub fn load_data(&mut self, data: &GameInfo, tech_tree: &TechData, _upgrades: Option<&CombatUpgrades>, _target_upgrades: Option<&CombatUpgrades>, unit_types_scope: &Vec<UnitTypeId>){
+        let temp_upgrades = CombatUpgrades::new(vec![]);
+        let temp_target_upgrades = CombatUpgrades::new(vec![]);
+        let upgrades: &CombatUpgrades = match _upgrades{
+                None => &temp_upgrades,
+                Some(t)=> t
+            };
+        let target_upgrades: &CombatUpgrades = match _target_upgrades{
+            None => &temp_target_upgrades
+            ,
+            Some(t) => t
+
+        };
+
         self.tech_data = match tech_tree.unittype(self.unit_type.to_tt()){
-            None => None,
+            None => {
+                println!("tech_data for {:?} is none", self.unit_type);
+                None
+            },
             Some(t) => Some(t)
         };
         self.type_data = match data.get_unit_data(self.unit_type){
-            None => None,
+            None => {
+                println!("Unit data for {:?} is none", self.unit_type);
+                None
+            },
             Some(t) => Some(t.clone())
         };
-        self.init_weapons()
+        self.init_weapons(data,tech_tree, upgrades, target_upgrades, unit_types_scope);
+
 
     }
-    pub fn init_weapons(&mut self){
+    pub fn init_weapons(&mut self, _data: &GameInfo, _tech_tree: &TechData, _upgrades: &CombatUpgrades,_target_upgrades: &CombatUpgrades, unit_types_scope: &Vec<UnitTypeId>){
+//        println!("Loading weapons for {:?}, type_data: {:?}, tech_data: {:?}", self.unit_type, self.type_data.is_some(), self.tech_data.is_some());
         for weapon in self.type_data.as_ref().unwrap().get_weapons(){
+
             let target_type: WeaponTargetType = weapon.get_target_type();
             if target_type == WeaponTargetType::AIR || target_type == WeaponTargetType::ANY{
-                self.air_weapons = Some(WeaponInfo::new(weapon, self.unit_type, None, None, self.type_data.as_ref().unwrap().borrow(), self.tech_data.as_ref().unwrap().borrow()));
+                self.air_weapons = Some(WeaponInfo::new(weapon,
+                                                        self.unit_type,
+                                                        _upgrades,
+                                                        _target_upgrades,
+                                                        self.type_data.as_ref().unwrap().borrow(),
+                                                        self.tech_data.as_ref().unwrap().borrow(),
+                                                        _data,
+                                                        _tech_tree,Some(unit_types_scope)));
             }
             if target_type == WeaponTargetType::GROUND || target_type == WeaponTargetType::ANY{
-                self.ground_weapons = Some(WeaponInfo::new(weapon, self.unit_type, None, None, self.type_data.as_ref().unwrap().borrow(), self.tech_data.as_ref().unwrap().borrow()));
+                self.ground_weapons = Some(WeaponInfo::new(weapon,
+                                                           self.unit_type,
+                                                           _upgrades,
+                                                           _target_upgrades,
+                                                           self.type_data.as_ref().unwrap().borrow(),
+                                                           self.tech_data.as_ref().unwrap().borrow(),
+                                                            _data,
+                                                           _tech_tree,Some(unit_types_scope)));
             }
         }
+//        println!("Loading weapons complete");
     }
     pub fn get_dps(&self, air:bool)-> f32{
         let air_weapon_dps:f32 = match &self.air_weapons{
             None => 0.0,
-            Some(t) => t.get_dps()
+            Some(t) => t.base_dps
         };
         let ground_weapon_dps:f32 = match &self.ground_weapons {
             None => 0.0,
-            Some(t) => t.get_dps()
+            Some(t) => t.base_dps
         };
         if air{
             air_weapon_dps
@@ -277,11 +315,17 @@ impl CombatUnitInfo{
         let mut _air_weapon: Option<WeaponInfo> = None;
         let mut _ground_weapon: Option<WeaponInfo>=None;
         for weapon in data.get_weapons(){
-            if weapon.get_target_type() == WeaponTargetType::ANY || weapon.get_target_type() == WeaponTargetType::AIR{
-                _air_weapon = Some(WeaponInfo::new(weapon, _type, Some(_upgrades), Some(_target_upgrades), data, &tech_tree));
+            if weapon.get_target_type() == WeaponTargetType::ANY ||
+                weapon.get_target_type() == WeaponTargetType::AIR{
+                _air_weapon = Some(WeaponInfo::new(weapon, _type, _upgrades,
+                                                   _target_upgrades, data,
+                                                   &tech_tree, _data,_tech_tree,None));
             }
-            if weapon.get_target_type() == WeaponTargetType::ANY || weapon.get_target_type() == WeaponTargetType::GROUND{
-                _ground_weapon = Some(WeaponInfo::new(weapon, _type, Some(_upgrades), Some(_target_upgrades), data, &tech_tree));
+            if weapon.get_target_type() == WeaponTargetType::ANY ||
+                weapon.get_target_type() == WeaponTargetType::GROUND{
+                _ground_weapon = Some(WeaponInfo::new(weapon, _type, _upgrades,
+                                                      _target_upgrades, data,
+                                                      &tech_tree,_data,_tech_tree,None));
             }
         }
         CombatUnitInfo{
