@@ -14,6 +14,12 @@ enum-primitive-derive = "^0.1"
 num-traits = "^0.1"
 rand = "0.7.2"
 stopwatch = "0.0.7"
+cache-macro = "0.4.1"
+lazy_static = "*"
+lru-cache = "*"
+noisy_float ="*"
+cached = "0.11.0"
+itertools = "0.8.2"
 
 [dependencies.pyo3]
 version = "0.8.5"
@@ -24,4 +30,8 @@ features = ["extension-module"]
 [dependencies.sc2-techtree]
 git = "https://github.com/danielvschoor/sc2-techtree.git"
 branch = "master"
+
+[profile.release]
+opt-level = 3
+#debug = true
 

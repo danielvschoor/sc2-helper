@@ -1,10 +1,10 @@
-import sc2
+# import sc2
 from sc2.ids.unit_typeid import UnitTypeId
-from sc2.bot_ai import *
-from sc2.player import Bot, Computer
+# from sc2.bot_ai import *
+# from sc2.player import Bot, Computer
 # from simulator import CombatUnit
 # from OverReactBot import OverReactBot
-from sc2 import Difficulty
+# from sc2 import Difficulty
 from data_caching import DataCache
 # from simulator_python import CombatPredictor, CombatUnit
 import simulator_python as sp
@@ -19,29 +19,32 @@ def test_data():
     # or_start_time = time.time()
     # start_time1 = time.time()
     start_time2=time.time()
-    cp = sh.CombatPredictor(_game_info=dc, path="C:\\Users\\danie\\Desktop\\Combat Simulator\\sc2-techtree\\data\\data_readable.json")
+    cp = sh.CombatPredictor(_game_info=dc, path="C:\\Users\\danie\\Desktop\\Combat Simulator\\sc2-techtree\\data\\data.json")
+    cp.init()
     end_time1 = time.time()
     print(end_time1-start_time2)
     
 
-    cu = sp.CombatUnit(unit=None, owner=1, type=UnitTypeId.MARINE, health=45.0, flying=False)
-    cu2 = sp.CombatUnit(unit=None,owner=2, type=UnitTypeId.HYDRALISK,health=90.0,flying=False)
-    cus = [cu.to_rust() for _ in range(4)]
-    cus2 = [cu2.to_rust() for _ in range(2)]
-    cs = sp.CombatSettings()
+    cu = sp.CombatUnit(unit=None,owner=2, type=UnitTypeId.ROACH,health=145.0,flying=False).to_rust()
+    cu2 = sp.CombatUnit(unit=None, owner=1, type=UnitTypeId.MARINE, health=45.0, flying=False).to_rust()
+    cus = [cu for _ in range(20)]
+    cus2 = [cu2 for _ in range(20)]
+    cs = sh.CombatSettings()
     cs.debug = False
     
     for x in range(1):
+        input("Press key")
         start_time2=time.time()
         # cp.units1 = cus
         # cp.units2 = cus
-        w = cp.predict_engage(cus, cus2, 1, cs)
+        w, health_left = cp.predict_engage(cus, cus2, 2, cs)
 
         end_time1 = time.time()
         print(end_time1-start_time2)
-        print("Winner = ", w)
+        print("Winner = ", w, " Health left=", health_left)
 
-
+    print("Done")
+    input()
 
 # cu2 = sh.CombatUnit(_owner=cu.owner, 
 #                     _unit_type=cu.type.value, 
@@ -211,5 +214,7 @@ def test_predictor():
         )
     main()
 
-# test_data()
-test_predictor()
+print("press any key to continue")
+input()
+test_data()
+# test_predictor()
