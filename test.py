@@ -27,8 +27,8 @@ def test_data():
 
     cu = sp.CombatUnit(unit=None,owner=2, type=UnitTypeId.ROACH,health=145.0,flying=False).to_rust()
     cu2 = sp.CombatUnit(unit=None, owner=1, type=UnitTypeId.MARINE, health=45.0, flying=False).to_rust()
-    cus = [cu for _ in range(20)]
-    cus2 = [cu2 for _ in range(20)]
+    cus = [cu for _ in range(100)]
+    cus2 = [cu2 for _ in range(100)]
     cs = sh.CombatSettings()
     cs.debug = False
     
