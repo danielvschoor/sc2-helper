@@ -19,30 +19,39 @@ def test_data():
     # or_start_time = time.time()
     # start_time1 = time.time()
     start_time2=time.time()
-    cp = sh.CombatPredictor(_game_info=dc, path="C:\\Users\\danie\\Desktop\\Combat Simulator\\sc2-techtree\\data\\data.json")
+    cp = sh.CombatPredictor(_game_info=dc, path="D:\Rust\Combat Simulator\sc2-techtree\data\data.json")
     cp.init()
+    # cp.serialize_game_data()
     end_time1 = time.time()
     print(end_time1-start_time2)
     
 
-    cu = sp.CombatUnit(unit=None,owner=2, type=UnitTypeId.ROACH,health=145.0,flying=False).to_rust()
-    cu2 = sp.CombatUnit(unit=None, owner=1, type=UnitTypeId.MARINE, health=45.0, flying=False).to_rust()
-    cus = [cu for _ in range(100)]
-    cus2 = [cu2 for _ in range(100)]
+    cu = sp.CombatUnit(unit=None,owner=2, type=UnitTypeId.ROACH,health=145.0,flying=False,data_cache=dc).to_rust()
+    cu2 = sp.CombatUnit(unit=None, owner=1, type=UnitTypeId.MARINE, health=45.0, flying=False,data_cache=dc).to_rust()
+    cus = [cu for _ in range(10)]
+    cus2 = [cu2 for _ in range(10)]
     cs = sh.CombatSettings()
     cs.debug = False
+    cs.multi_threaded = True
+    for y in [10, 100, 1000]:
+        print(f"Doing {y} units")
+        cus = [cu for _ in range(y)]
+        cus2 = [cu2 for _ in range(y)]
+        times = []
     
-    for x in range(1):
-        input("Press key")
-        start_time2=time.time()
-        # cp.units1 = cus
-        # cp.units2 = cus
-        w, health_left = cp.predict_engage(cus, cus2, 2, cs)
+        for x in range(100):
+            # input("Press key")
+            start_time2=time.time()
+            # cp.units1 = cus
+            # cp.units2 = cus
+            w, health_left = cp.predict_engage(cus, cus2, 2, cs)
 
-        end_time1 = time.time()
-        print(end_time1-start_time2)
+            end_time1 = time.time()
+            times.append(end_time1-start_time2)
         print("Winner = ", w, " Health left=", health_left)
-
+            
+            # input()
+        print(f"{y} vs {y} units avg over 100 runs: {sum(times)/len(times)}")
     print("Done")
     input()
 

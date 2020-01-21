@@ -90,14 +90,14 @@ def generate(file="D:\Documents\StarCraft II\stableid.json"):
     data = parse_data(file_data)
     for gen in to_generate:
         base_data += generate_for(gen, data[map_data_to_id[gen]]) +["\n\n"]
-    with open('generated_enums.rs','w+') as f:
+    with open('src/generated_enums.rs', 'w+') as f:
         for x in base_data:
             f.write(x+'\n')
     
     
 def main():
     generate()
-    shutil.move('generated_enums.rs', "rust_lib/src/generated_enums.rs")
+    shutil.move('src/generated_enums.rs', "rust_lib/src/generated_enums.rs")
     
 if __name__ == "__main__":
     main()

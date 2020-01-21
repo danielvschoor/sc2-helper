@@ -1,36 +1,39 @@
 use crate::combat_unit::{CombatUnit, IS_MELEE};
 use crate::generated_enums::{AbilityId, UnitTypeId, UpgradeId};
 use crate::num_traits::{FromPrimitive, ToPrimitive};
-use cache_macro::cache;
-use cached;
-use cached::SizedCache;
-use lru_cache::LruCache;
 use pyo3::derive_utils::IntoPyResult;
 use pyo3::types::PyAny;
 use pyo3::{
     FromPy, FromPyObject, IntoPy, ObjectProtocol, PyErr, PyObject, PyResult, Python, ToPyObject,
 };
+use rayon::prelude::*;
 use sc2_techtree::UnitType;
 use sc2_techtree::{Attribute as A, TechData};
+use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
-use std::collections::{HashMap, HashSet};
 use std::f32::EPSILON;
+use std::fmt;
 use std::hash::Hash;
+use rustc_hash::{FxHashSet, FxHashMap};
 
-cached_key! {
-    GET_TECH_DATA: SizedCache<UnitTypeId, UnitType> = SizedCache::with_size(50);
-    Key = {unit};
-    fn get_tech_data(unit: UnitTypeId, tech_tree: &TechData) -> UnitType ={
-        tech_tree.unittype(unit.to_tt()).unwrap()
-    }
-}
 //cached_key! {
-//CALCULATE_DPS: SizedCache<(UnitTypeId, UnitTypeId), f32> = SizedCache::with_size(50);
-//Key = {(attacker, target)};
-
+//    GET_TECH_DATA: SizedCache<UnitTypeId, UnitType> = SizedCache::with_size(50);
+//    Key = {unit};
+pub fn get_tech_data(unit: UnitTypeId, tech_tree: &TechData) -> UnitType {
+    tech_tree.unittype(unit.to_tt()).unwrap()
+}
+//    }
 //}
+//cached_key! {
+//    GET_UNIT_DATA: SizedCache<UnitTypeId, UnitTypeData> = SizedCache::with_size(50);
+//    Key = {unit};
+pub fn get_unit_data(unit: UnitTypeId, data: &GameInfo) -> UnitTypeData {
+    data.get_unit_data(unit).unwrap().clone()
+}
+//}
+
 #[allow(missing_docs)]
-#[derive(Primitive, Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Primitive, Debug, Copy, Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub enum Attribute {
     NULL = 0,
     LIGHT = 1,
@@ -94,7 +97,7 @@ impl Attribute {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
 pub struct DamageBonus {
     attribute: Attribute,
     bonus: f32,
@@ -132,7 +135,7 @@ impl<'source> FromPyObject<'source> for DamageBonus {
 }
 
 #[allow(missing_docs)]
-#[derive(Primitive, Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Primitive, Debug, Copy, Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub enum WeaponTargetType {
     NULL = 0,
     GROUND = 1,
@@ -168,7 +171,7 @@ impl<'source> FromPyObject<'source> for WeaponTargetType {
     }
 }
 #[allow(missing_docs)]
-#[derive(Primitive, Debug, Copy, Clone, PartialEq)]
+#[derive(Primitive, Debug, Copy, Clone, PartialEq, Deserialize, Serialize)]
 pub enum Race {
     NORACE = 0,
     TERRAN = 1,
@@ -205,7 +208,7 @@ impl<'source> FromPyObject<'source> for Race {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnitTypeData {
     unit_type: UnitTypeId,
     name: String,
@@ -357,7 +360,7 @@ impl<'source> FromPyObject<'source> for UnitTypeData {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Weapon {
     target_type: WeaponTargetType,
     damage: f32,
@@ -451,12 +454,12 @@ impl<'source> FromPyObject<'source> for Weapon {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct WeaponInfo {
     weapon: Weapon,
     pub splash: f32,
     pub base_dps: f32,
-    dps_cache: Vec<f32>,
+    dps_cache: Vec<(usize, f32)>,
 }
 
 impl WeaponInfo {
@@ -469,43 +472,105 @@ impl WeaponInfo {
         _unit_tech_tree: &UnitType,
         _data: &GameInfo,
         _tech_tree: &TechData,
-        _unit_types_scope: &HashSet<usize>,
+        _unit_types_scope: &FxHashSet<usize>,
+        multi_threaded: bool,
     ) -> Self {
         let _splash: f32 = 0.0;
         let bonus_damage: f32 =
             get_damage_bonus(_type, _upgrades, _unit_data, _unit_tech_tree) as f32;
 
         let _base_dps: f32 = _weapon.damage + bonus_damage;
-        let mut _dps_cache: Vec<f32> = vec![0.0; _data.unit_data.len()];
-
-        for x in _unit_types_scope {
-            //            let index: usize = x.to_usize().unwrap();
-            if _dps_cache[*x] == 0.0 {
-                _dps_cache[*x] = calculate_dps(
-                    _type,
-                    UnitTypeId::from_usize(*x).unwrap(),
-                    _weapon,
-                    _unit_data,
-                    _unit_tech_tree,
-                    _upgrades,
-                    _target_upgrades,
-                    _data,
-                    _tech_tree,
-                )
+        //        let max : &usize = _unit_types_scope.iter().max().unwrap();
+        //        let mut dps_cache: HashMap<usize, f32, RandomState> = HashMap::with_capacity(100);
+        //            let mut dps_cache:Vec<(usize,f32)> = Vec::with_capacity(20);
+        //                dps_cache.par_extend(_unit_types_scope.par_iter().map(|x|(*x, calculate_dps(_type,
+        //                                UnitTypeId::from_usize(*x).unwrap(),
+        //                                _weapon,
+        //                                _unit_data,
+        //                                _unit_tech_tree,
+        //                                _upgrades,
+        //                                _target_upgrades,
+        //                                _data,
+        //                                _tech_tree,))));
+        let mut dps_cache: Vec<(usize, f32)> = Vec::with_capacity(50);
+        if multi_threaded {
+            dps_cache = _unit_types_scope
+                .par_iter()
+                .map(|x| {
+                    (
+                        *x,
+                        calculate_dps(
+                            _type,
+                            UnitTypeId::from_usize(*x).unwrap(),
+                            _weapon,
+                            _unit_data,
+                            _unit_tech_tree,
+                            _upgrades,
+                            _target_upgrades,
+                            _data,
+                            _tech_tree,
+                        ),
+                    )
+                })
+                .collect();
+        //            dps_cache.par_extend(_unit_types_scope.par_iter().map(|x| {
+        //                (
+        //                    *x,
+        //                    calculate_dps(
+        //                        _type,
+        //                        UnitTypeId::from_usize(*x).unwrap(),
+        //                        _weapon,
+        //                        _unit_data,
+        //                        _unit_tech_tree,
+        //                        _upgrades,
+        //                        _target_upgrades,
+        //                        _data,
+        //                        _tech_tree,
+        //                    ),
+        //                )
+        //            }));
+        } else {
+            //            let mut dps_cache:Vec<(usize,f32)> = Vec::with_capacity(50);
+            for x in _unit_types_scope.iter() {
+                dps_cache.push((
+                    *x,
+                    calculate_dps(
+                        _type,
+                        UnitTypeId::from_usize(*x).unwrap(),
+                        _weapon,
+                        _unit_data,
+                        _unit_tech_tree,
+                        _upgrades,
+                        _target_upgrades,
+                        _data,
+                        _tech_tree,
+                    ),
+                ));
             }
         }
 
+        //        for (x,y) in &dps_cache{
+        //            println!("{:?}: {:?}", x,y)
+        //        };
         WeaponInfo {
             weapon: _weapon.clone(),
             splash: _splash,
             base_dps: _base_dps,
-            dps_cache: _dps_cache,
+            dps_cache,
         }
     }
-    #[inline]
+
     pub fn get_dps(&self, target: UnitTypeId) -> f32 {
-        let dps: f32 = self.dps_cache[target as usize];
-        (dps).max(0.0)
+        let target = target as usize;
+        for (x, y) in &self.dps_cache {
+            if *x == target {
+                *y
+            } else {
+                continue;
+            };
+        }
+        0.0
+        //        *self.dps_cache.get(&(target as usize)).unwrap()
     }
 
     pub fn set_weapon(
@@ -568,9 +633,14 @@ impl<'source> FromPyObject<'source> for WeaponInfo {
                 },
                 splash: obj.getattr(py, "splash")?.extract(py)?,
                 base_dps: obj.getattr(py, "_base_dps")?.extract(py)?,
-                dps_cache: Vec::with_capacity(2000),
+                dps_cache: Vec::new(),
             })
         }
+    }
+}
+impl std::fmt::Debug for WeaponInfo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Hi: {}", 1)
     }
 }
 
@@ -637,7 +707,7 @@ impl<'source> FromPyObject<'source> for UnitInfo {
     }
 }
 
-#[derive(Primitive, Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Primitive, Debug, Copy, Clone, Eq, PartialEq, Deserialize, Serialize)]
 pub enum AbilityTarget {
     NONE = 1,
     /// Ability targets a location.
@@ -678,7 +748,7 @@ impl<'source> FromPyObject<'source> for AbilityTarget {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AbilityData {
     available: bool,
     ability: AbilityId,
@@ -817,7 +887,7 @@ impl<'source> FromPyObject<'source> for AbilityData {
 }
 
 /// Upgrade data.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct UpgradeData {
     upgrade: UpgradeId,
     name: String,
@@ -885,12 +955,12 @@ impl<'source> FromPyObject<'source> for UpgradeData {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct GameInfo {
     //    ability_data: HashMap<u32, AbilityData>,
-    unit_data: HashMap<u32, UnitTypeData>,
+    unit_data: FxHashMap<u32, UnitTypeData>,
     //    upgrade_data: HashMap<u32, UpgradeData>,
-    available_units: HashSet<usize>,
+    available_units: FxHashSet<usize>,
 }
 
 //impl ToPyObject for GameInfo{
@@ -916,7 +986,7 @@ impl<'source> FromPyObject<'source> for GameInfo {
                 //                ability_data: obj.getattr(py, "ability_data")?.extract(py)?,
                 unit_data: obj.getattr(py, "unit_data")?.extract(py)?,
                 //                upgrade_data: obj.getattr(py, "upgrade_data")?.extract(py)?,
-                available_units: HashSet::with_capacity(10),
+                available_units: FxHashSet::with_capacity_and_hasher(10, Default::default()),
             })
         }
     }
@@ -924,7 +994,7 @@ impl<'source> FromPyObject<'source> for GameInfo {
 
 impl GameInfo {
     pub(crate) fn get_unit_data(&self, unit_id: UnitTypeId) -> Option<&UnitTypeData> {
-        let id: u32 = unit_id.to_u32().unwrap();
+        let id: u32 = unit_id as u32;
         self.unit_data.get(id.borrow())
     }
 
@@ -934,7 +1004,7 @@ impl GameInfo {
         }
     }
 
-    pub fn get_available_units(&self) -> &HashSet<usize> {
+    pub fn get_available_units(&self) -> &FxHashSet<usize> {
         &self.available_units
     }
 }
@@ -943,9 +1013,9 @@ pub fn is_melee(unit: UnitTypeId) -> bool {
     IS_MELEE.contains(&unit)
 }
 
-#[cache(LruCache : LruCache::new(30))]
-#[cache_cfg(ignore_args = _data, _tech_tree)]
-#[cache_cfg(thread_local)]
+//#[cache(LruCache : LruCache::new(30))]
+//#[cache_cfg(ignore_args = _data, _tech_tree)]
+//#[cache_cfg(thread_local)]
 pub fn get_damage_bonus(
     unit: UnitTypeId,
     upgrades: &CombatUpgrades,
@@ -1055,9 +1125,9 @@ pub fn get_damage_bonus(
     bonus
 }
 
-#[cache(LruCache : LruCache::new(30))]
-#[cache_cfg(ignore_args = _data,_tech_tree)]
-#[cache_cfg(thread_local)]
+//#[cache(LruCache : LruCache::new(30))]
+//#[cache_cfg(ignore_args = _data,_tech_tree)]
+//#[cache_cfg(thread_local)]
 pub fn get_armor_bonus(
     unit: UnitTypeId,
     upgrades: &CombatUpgrades,
@@ -1162,14 +1232,14 @@ impl CombatUpgrades {
         self.0.contains(&upgrade)
     }
 }
-macro_rules! unwrap_or_return {
-    ( $e:expr ) => {
-        match $e {
-            Some(x) => x,
-            None => return 0.0,
-        }
-    };
-}
+//macro_rules! unwrap_or_return {
+//    ( $e:expr ) => {
+//        match $e {
+//            Some(x) => x,
+//            None => return 0.0,
+//        }
+//    };
+//}
 
 //#[cache(LruCache : LruCache::new(30))]
 //#[cache_cfg(ignore_args = attacker_game_data, attacker_tech_data,_data,_tech_tree, weapon)]
@@ -1179,11 +1249,11 @@ pub fn can_be_attacked_by_air_weapons(unit: &CombatUnit) -> bool {
     unit.unit_type == UnitTypeId::COLOSSUS || unit.is_flying
 }
 
-//#[cache(LruCache : LruCache::new(10))]
-//#[cache_cfg(ignore_args = tech_tree)]
+//#[cache(LruCache : LruCache::new(100))]
+//#[cache_cfg(ignore_args = weapon, attacker_game_data, attacker_tech_data, attacker_upgrades, target_upgrades, _data, _tech_tree)]
 //#[cache_cfg(thread_local)]
 
-pub fn calculate_dps(
+fn calculate_dps(
     attacker: UnitTypeId,
     target: UnitTypeId,
     weapon: &Weapon,

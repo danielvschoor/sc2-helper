@@ -1,22 +1,18 @@
 use crate::combat_unit::{clone_vec, CombatUnit};
-use crate::game_info::{
-    can_be_attacked_by_air_weapons, Attribute, GameInfo, UnitTypeData, WeaponInfo,
-};
+use crate::game_info::{can_be_attacked_by_air_weapons, Attribute, GameInfo, WeaponInfo};
 use crate::generated_enums::UnitTypeId;
-use crate::num_traits::ToPrimitive;
 use pyo3::prelude::*;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use rand::Rng;
+use rustc_hash::{FxHashSet};
 use sc2_techtree::TechData;
+use serde_json;
 use std::borrow::{Borrow, BorrowMut};
-use std::collections::HashSet;
 use std::f32::consts::PI;
 use std::f32::EPSILON;
 use std::fs::File;
 use std::io::prelude::*;
-use stopwatch::Stopwatch;
-//use std::ops::{DerefMut, Deref};
+use rayon::prelude::*;
 
 #[derive(Clone, Copy)]
 pub struct SurroundInfo {
@@ -81,6 +77,8 @@ pub struct CombatSettings {
     max_time: f32,
     #[pyo3(get, set)]
     start_time: f32,
+    #[pyo3(get, set)]
+    multi_threaded: bool,
 }
 
 #[pymethods]
@@ -98,6 +96,7 @@ impl CombatSettings {
             assume_reasonable_positioning: true,
             max_time: 100_000.0,
             start_time: 0.0,
+            multi_threaded: false,
         })
     }
 }
@@ -136,31 +135,301 @@ impl CombatPredictor {
         })
     }
 
+    fn serialize_game_data(&self) {
+        let mut file = File::create("game_info.json").unwrap();
+        let serialized = serde_json::to_string(&self.data).unwrap();
+        file.write_all(serialized.as_ref()).unwrap();
+    }
+
     fn init(&mut self) {
-        self.data.load_available_units();
+        //        self.data.load_available_units();
     }
 
     fn predict_engage(
         &mut self,
-        py: Python<'_>,
         mut _units1: Vec<&CombatUnit>,
         mut _units2: Vec<&CombatUnit>,
         defender_player: u32,
         settings: &CombatSettings,
     ) -> PyResult<(u32, f32)> {
-        pyo3::prepare_freethreaded_python();
-        //        let sw = Stopwatch::start_new();
+        //        for mut u in _units1{
+        //            println!("{:?}",u.health);
+        //        }
+        let units1: Vec<CombatUnit> = clone_vec(_units1);
+        let units2: Vec<CombatUnit> = clone_vec(_units2);
 
-        let units1: Vec<CombatUnit> = py.allow_threads(move || clone_vec(_units1));
-        let units2: Vec<CombatUnit> = py.allow_threads(move || clone_vec(_units2));
-
-        //        println!("Memory swap took {:?}", sw.elapsed());
         let (x, y) = self._predict_engage(units1, units2, defender_player, settings);
         Ok((x, y))
     }
 }
 
 impl CombatPredictor {
+    fn nop_new(_game_info: GameInfo, path: Option<String>) -> Self {
+        let td: TechData = match path {
+            Some(p) => {
+                let mut file = File::open(p).unwrap();
+
+                let mut contents = String::with_capacity(100);
+                file.read_to_string(&mut contents).unwrap();
+
+                match TechData::from_path(contents.as_ref()) {
+                    Err(e) => {
+                        println!("{:?}", e);
+                        TechData::current()
+                    }
+                    Ok(t) => t,
+                }
+            }
+            None => TechData::current(),
+        };
+        CombatPredictor {
+            data: _game_info,
+            tech_data: td,
+        }
+    }
+
+    fn get_zealot_radius(&self) -> f32 {
+        self.tech_data
+            .unittype(UnitTypeId::ZEALOT.to_tt())
+            .unwrap()
+            .radius
+            .into()
+    }
+
+    fn load_data(
+        &self,
+        units: &mut [CombatUnit],
+        reset_buff: bool,
+        unit_types_scope: &FxHashSet<usize>,
+        muti_threaded: bool,
+    ) {
+        for u in units {
+            u.load_data(
+                self.data.borrow(),
+                self.tech_data.borrow(),
+                None,
+                None,
+                &unit_types_scope,
+                muti_threaded,
+            );
+            if reset_buff {
+                u.buff_timer = 0.0;
+            }
+        }
+    }
+
+    fn get_fastest_attacker_speed(units: &[CombatUnit]) -> f32 {
+        let mut fastest_attacker_speed = 0.0;
+
+        for u in units {
+            if u.get_movement_speed() > fastest_attacker_speed {
+                fastest_attacker_speed = u.get_movement_speed();
+            }
+        }
+        fastest_attacker_speed
+    }
+
+    fn get_max_range_defender(units: &[CombatUnit]) -> f32 {
+        let mut max_range_defender: f32 = 0.0;
+        for u in units {
+            if u.get_attack_range() > max_range_defender {
+                max_range_defender = u.get_attack_range();
+            }
+        }
+        max_range_defender
+    }
+
+    fn get_unit_info(units: &[CombatUnit], time: f32) -> (i32, i32, f32, f32, f32) {
+        let mut has_air: i32 = 0;
+        let mut has_ground: i32 = 0;
+        let mut ground_area: f32 = 0.0;
+        let mut average_health_by_time: f32 = 0.0;
+        let mut average_health_by_time_weight: f32 = 0.0;
+        for unit in units {
+            if unit.health > 0.0 {
+                has_air += can_be_attacked_by_air_weapons(unit) as i32;
+                has_ground += !unit.is_flying as i32;
+                let r: f32 = unit.get_radius();
+                ground_area += r * r;
+
+                average_health_by_time += time * unit.health + unit.shield;
+                average_health_by_time_weight += unit.health + unit.shield;
+            }
+        }
+        (
+            has_air,
+            has_ground,
+            ground_area,
+            average_health_by_time,
+            average_health_by_time_weight,
+        )
+    }
+
+    fn find_best_target_multi_threaded(
+        unit: &CombatUnit,
+        units: &'a [CombatUnit],
+        combat_settings: &CombatSettings,
+        has_ground: bool,
+        has_air: bool,
+        is_unit_melee: bool,
+        melee_unit_attack_count: &[i32],
+        surround: &SurroundInfo,
+        opponent_fraction_melee_units: f32,
+        _best_weapon: Option<&'b WeaponInfo>,
+    ) -> (Option<&'a CombatUnit>, usize, Option<&'b WeaponInfo>, f32) {
+        //        let best_target: Option<&'a CombatUnit> = None;
+        //        let best_target_index: usize = 0;
+        //        let best_score: f32 = 0.0;
+        //        let best_weapon: Option<&'b WeaponInfo> = None;
+        //        let best_dps: f32 = 0.0;
+
+        //        let best_units:Vec<_> =
+        let (_, best_target, best_weapon, best_dps, best_target_index) = units
+            .into_par_iter()
+            .enumerate()
+            .map(|(j, other)| {
+                let air_dps2: f32 = match &unit.air_weapons {
+                    Some(t) => t.get_dps(other.unit_type),
+                    None => 0.0,
+                };
+                let ground_dps2: f32 = match &unit.ground_weapons {
+                    Some(t) => t.get_dps(other.unit_type),
+                    None => 0.0,
+                };
+
+                let dps: f32 = air_dps2.max(ground_dps2);
+                let mut score: f32 = dps * target_score(other, has_ground, has_air) * 0.001;
+
+                if is_unit_melee {
+                    if combat_settings.enable_surround_limits
+                        && melee_unit_attack_count[j] >= surround.max_attackers_per_defender
+                    {
+                        score = 0.0;
+                    }
+
+                    if !combat_settings.bad_micro && combat_settings.assume_reasonable_positioning {
+                        score = -score;
+                    }
+                    if combat_settings.enable_melee_blocking && other.is_melee() {
+                        score += 1000.00;
+                    } else if combat_settings.enable_melee_blocking
+                        && unit.get_movement_speed() < 1.05 * other.get_movement_speed()
+                    {
+                        score += 500.00;
+                    }
+                } else if !unit.is_flying {
+                    let range_diff: f32 = other.get_attack_range() - unit.get_attack_range();
+                    if opponent_fraction_melee_units > 0.5 && range_diff > 0.5 {
+                        score -= 1000.00;
+                    } else if opponent_fraction_melee_units > 0.3 && range_diff > 1.0 {
+                        score -= 1000.00
+                    }
+                }
+                (score, Some(other), _best_weapon, unit.get_max_dps(), j)
+            })
+            .reduce(
+                || (0.0, None, None, 0.0, 0),
+                |a, b| (if a.0 > b.0 { a } else { b }),
+            );
+        //.collect();
+
+        //        for y in best_units {
+        //            if y.0 > best_score {
+        //                best_target = y.1;
+        //                best_weapon = y.2;
+        //                best_dps = y.3;
+        //                best_target_index = y.4;
+        //            }
+        //        }
+
+        (best_target, best_target_index, best_weapon, best_dps)
+    }
+
+    fn find_best_target(
+        unit: &CombatUnit,
+        units: &'a [CombatUnit],
+        combat_settings: &CombatSettings,
+        has_ground: bool,
+        has_air: bool,
+        is_unit_melee: bool,
+        melee_unit_attack_count: &[i32],
+        surround: &SurroundInfo,
+        opponent_fraction_melee_units: f32,
+        _best_weapon: Option<&'b WeaponInfo>,
+    ) -> (Option<&'a CombatUnit>, usize, Option<&'b WeaponInfo>, f32) {
+        let mut best_target: Option<&'a CombatUnit> = None;
+        let mut best_target_index: usize = 0;
+        let mut best_score: f32 = 0.0;
+        let mut best_weapon: Option<&'b WeaponInfo> = None;
+        let mut best_dps: f32 = 0.0;
+
+        for (j, other) in units.iter().enumerate() {
+            let air_dps2: f32 = match &unit.air_weapons {
+                Some(t) => t.get_dps(other.unit_type),
+                None => 0.0,
+            };
+            let ground_dps2: f32 = match &unit.ground_weapons {
+                Some(t) => t.get_dps(other.unit_type),
+                None => 0.0,
+            };
+
+            let dps: f32 = air_dps2.max(ground_dps2);
+
+            let mut score: f32 = dps * target_score(other, has_ground, has_air) * 0.001;
+
+            if is_unit_melee {
+                if combat_settings.enable_surround_limits
+                    && melee_unit_attack_count[j] >= surround.max_attackers_per_defender
+                {
+                    continue;
+                }
+
+                if !combat_settings.bad_micro && combat_settings.assume_reasonable_positioning {
+                    score = -score;
+                }
+                if combat_settings.enable_melee_blocking && other.is_melee() {
+                    score += 1000.00;
+                } else if combat_settings.enable_melee_blocking
+                    && unit.get_movement_speed() < 1.05 * other.get_movement_speed()
+                {
+                    score += 500.00;
+                }
+            } else if !unit.is_flying {
+                let range_diff: f32 = other.get_attack_range() - unit.get_attack_range();
+                if opponent_fraction_melee_units > 0.5 && range_diff > 0.5 {
+                    score -= 1000.00;
+                } else if opponent_fraction_melee_units > 0.3 && range_diff > 1.0 {
+                    score -= 1000.00
+                }
+            }
+
+            match best_target {
+                None => {
+                    best_score = score;
+                    best_target = Some(other);
+                    best_target_index = j;
+                    best_weapon = _best_weapon;
+                    best_dps = unit.get_max_dps();
+                }
+                Some(t) => {
+                    if (score - best_score).abs() < EPSILON
+                        && unit.health + unit.shield < t.health + t.shield
+                    {
+                        best_score = score;
+                        best_target = Some(other);
+                        best_target_index = j;
+                        best_dps = unit.get_max_dps();
+                        best_weapon = _best_weapon;
+                    }
+                }
+            }
+            //            if score > 1.0{
+            //                break
+            //            }
+        }
+
+        (best_target, best_target_index, best_weapon, best_dps)
+    }
     fn _predict_engage(
         &mut self,
         mut units1: Vec<CombatUnit>,
@@ -168,137 +437,288 @@ impl CombatPredictor {
         defender_player: u32,
         combat_settings: &CombatSettings,
     ) -> (u32, f32) {
-        let debug: bool = combat_settings.debug;
-
-        let zealot_radius: f32 = self
-            .tech_data
-            .unittype(UnitTypeId::ZEALOT.to_tt())
-            .unwrap()
-            .radius
-            .into();
         const HEALING_PER_SECOND: f32 = 12.6 / 1.4;
         const SHIELDS_PER_NORMAL_SPEED_SECOND: f32 = 50.4 / 1.4;
         const ENERGY_USE_PER_SHIELD: f32 = 1.0 / 3.0;
-        //        let temporary_units: Vec<CombatUnit> = Vec::<CombatUnit>::with_capacity(100);
-        let mut rng = thread_rng();
+        const MAX_ITERATIONS: u32 = 100;
 
-        //        let sw = Stopwatch::start_new();
+        let debug: bool = combat_settings.debug;
+        let zealot_radius: f32 = self.get_zealot_radius();
 
-        units1.shuffle(&mut rng);
-        units2.shuffle(&mut rng);
-        //        println!("Shuffle took {:?}", sw.elapsed());
+        //        let mut unit_types_scope: FnvHashSet<usize> =
+        //            FnvHashSet::with_capacity_and_hasher(100, Default::default());
+        let mut time: f32 = combat_settings.start_time;
+        let reset_buff: bool = time == 0.00;
+
+        let mut average_health_by_time: [f32; 2] = [0.0, 0.0];
+        let mut average_health_by_time_weight: [f32; 2] = [0.0, 0.0];
+        let mut max_range_defender: f32 = 0.0;
+        let mut fastest_attacker_speed: f32 = 0.0;
+        let mut changed: bool = true;
+        let mut unit_types_scope = FxHashSet::with_capacity_and_hasher(100, Default::default());
+
+//        if combat_settings.multi_threaded {
+//            unit_types_scope.par_extend(units1.par_iter().map(|x| x.unit_type as usize));
+//            unit_types_scope.par_extend(units2.par_iter().map(|x| x.unit_type as usize));
+//        } else {
+            for unit in &units1 {
+                unit_types_scope.insert(unit.unit_type as usize);
+            }
+            for unit in &units2 {
+                unit_types_scope.insert(unit.unit_type as usize);
+            }
+//        }
+        //       units2.par_iter().for_each(|unit|{
+        //            unit_types_scope.insert(unit.unit_type as usize);
+        //        });
+        //        for unit in &units2 {
+        //            unit_types_scope.insert(unit.unit_type as usize);
+        //        }
+        //        unit_types_scope.extend(
+        //            &units1
+        //                .iter()
+        //                .map(|n| n.unit_type as usize)
+        //                .collect::<Vec<usize>>(),
+        //        );
+        //        unit_types_scope.extend(
+        //            units2
+        //                .iter()
+        //                .map(|n| n.unit_type as usize)
+        //                .collect::<Vec<usize>>(),
+        //        );
 
         if debug {
             println!("Loading data");
         }
+        //        let units1_pointer = Arc::new(units1);
+        //        let units2_pointer = Arc::new(units2);
+        //
+        //        let mut t_pointer1 = units1_pointer.clone();
+        //        let mut t_pointer2 = units2_pointer.clone();
+        //
 
-        //        let sw = Stopwatch::start_new();
-        //        let mut unit_types_scope: Vec<UnitTypeId> = vec![];
-        let mut unit_types_scope: HashSet<usize> = HashSet::with_capacity(100);
+        let mut rng = thread_rng();
+        units1.shuffle(&mut rng);
+        units2.shuffle(&mut rng);
+        if combat_settings.multi_threaded {
+            units1.par_iter_mut().for_each(|u| {
+                u.load_data(
+                    self.data.borrow(),
+                    self.tech_data.borrow(),
+                    None,
+                    None,
+                    &unit_types_scope,
+                    combat_settings.multi_threaded,
+                );
+                if reset_buff {
+                    u.buff_timer = 0.0;
+                }
+            });
 
-        for u in &units1 {
-            unit_types_scope.insert(u.unit_type.to_usize().unwrap());
-        }
-
-        for u in &units2 {
-            unit_types_scope.insert(u.unit_type.to_usize().unwrap());
-        }
-        for (u1, u2) in units1.iter_mut().zip(units2.iter_mut()) {
-            u1.load_data(
-                self.data.borrow(),
-                self.tech_data.borrow(),
-                None,
-                None,
+            units2.par_iter_mut().for_each(|u| {
+                u.load_data(
+                    self.data.borrow(),
+                    self.tech_data.borrow(),
+                    None,
+                    None,
+                    &unit_types_scope,
+                    combat_settings.multi_threaded,
+                );
+                if reset_buff {
+                    u.buff_timer = 0.0;
+                }
+            });
+        } else {
+            self.load_data(
+                &mut units1,
+                reset_buff,
                 &unit_types_scope,
+                combat_settings.multi_threaded,
             );
-            u2.load_data(
-                self.data.borrow(),
-                self.tech_data.borrow(),
-                None,
-                None,
+            self.load_data(
+                &mut units2,
+                reset_buff,
                 &unit_types_scope,
-            );
+                combat_settings.multi_threaded,
+            )
         }
+
+        //        let _data_pointer = Arc::new(&self.data);
+        //        let _tech_data_pointer = Arc::new(&self.tech_data);
+        //
+        //        let pointer = Arc::new(&unit_types_scope[..]);
+        //        let mut units1_pointer = Arc::new(units1).clone();
+        //        let mut units2_pointer = Arc::new(units2).clone();
+
+        //        thread::scope(|s| {
+        //            let shuffle_handle = s.spawn(|_| {
+        //                let mut rng = thread_rng();
+        //                units1_pointer.shuffle(&mut rng);
+        //            });
+        //            let shuffle_handle2 = s.spawn(|_| {
+        //                let mut rng = thread_rng();
+        //                units2_pointer.shuffle(&mut rng);
+        //            });
+        //            shuffle_handle.join();
+        //            shuffle_handle2.join();
+        //
+        //            let handle = s.spawn(move |_|{
+        //
+        //              for unit in units1.to_owned().iter().unique_by(|s| s.unit_type) {
+        //                    unit_types_scope.push(unit.unit_type as usize)
+        //                }}
+        //            );
+        //            let handle2 = s.spawn(move |_| {
+        //                for unit in units2.to_owned().iter().unique_by(|s| s.unit_type) {
+        //                    unit_types_scope.push(unit.unit_type as usize)
+        //                }
+        //            });
+        //
+        //
+        //            let _t_data_pointer = *_data_pointer.clone();
+        //            let _t_tech_data_pointer = *_tech_data_pointer.clone();
+        ////            let t_pointer = (*pointer.clone());
+        //            handle.join();
+        //            handle2.join();
+        //            for u in units1.iter_mut() {
+        //               let t_pointer = (*pointer.clone());
+        //                s.spawn(move |_| {
+        //                    u.load_data(
+        //                        &(_t_data_pointer),
+        //                        &(_t_tech_data_pointer),
+        //                        None,
+        //                        None,
+        //                        t_pointer,
+        //                    );
+        //                    if reset_buff {
+        //                        u.buff_timer = 0.0;
+        //                    }
+        //                });
+        //            }
+        //            let _t_data_pointer = *_data_pointer.clone();
+        //            let _t_tech_data_pointer = *_tech_data_pointer.clone();
+        ////            let t_pointer = ;
+        //            for u in units2.iter_mut() {
+        //                let t_pointer = (*pointer.clone());
+        //                s.spawn(move |_| {
+        //                    u.load_data(
+        //                        &(_t_data_pointer),
+        //                        &(_t_tech_data_pointer),
+        //                        None,
+        //                        None,
+        //                        t_pointer,
+        //                    );
+        //                    if reset_buff {
+        //                        u.buff_timer = 0.0;
+        //                    }
+        //                });
+        //            }
+        //
+        //            //            s.spawn(move |_| {
+        //            //                let mut rng = thread_rng();
+        //            //                for u in units2.iter_mut() {
+        //            //                    u.load_data(
+        //            //                        self.data.borrow(),
+        //            //                        self.tech_data.borrow(),
+        //            //                        None,
+        //            //                        None,
+        //            //                        &unit_types_scope,
+        //            //                    );
+        //            //                    if reset_buff {
+        //            //                        u.buff_timer = 0.0;
+        //            //                    }
+        //            //                }
+        //            //                units2.shuffle(&mut rng);
+        //            //            });
+        //        }).unwrap();
+        //        let handle = thread::Builder::new()
+        //            .name("units1".to_owned())
+        //            .spawn(move||{
+        //               for u in t_pointer1 {
+        //                    u.load_data(
+        //                        &_t_data_pointer,
+        //                        &_t_tech_data_pointer,
+        //                        None,
+        //                        None,
+        //                        &unit_types_scope,
+        //                    );
+        //            if reset_buff {
+        //                u.buff_timer = 0.0;
+        //            }
+        //        }
+        //
+        ////
+        //            });
+        //        self.load_data(&mut units1, reset_buff, &unit_types_scope);
+        //        self.load_data(&mut units2, reset_buff, &unit_types_scope);
+        //        units1.shuffle(&mut rng);
+        //        units2.shuffle(&mut rng);
 
         if debug {
             println!("Data loaded");
         }
-        //        println!("Load data took {:?}", sw.elapsed());
 
-        //        let sw = Stopwatch::start_new();
-
-        let mut average_health_by_time: Vec<f32> = vec![0.0, 0.0];
-        let mut average_health_by_time_weight: Vec<f32> = vec![0.0, 0.0];
-        let mut max_range_defender: f32 = 0.0;
-        let mut fastest_attacker_speed: f32 = 0.0;
         if defender_player == 1 || defender_player == 2 {
-            for u in if defender_player == 1 {
-                &units1
+            if defender_player == 1 {
+                max_range_defender = Self::get_max_range_defender(&units1);
+                fastest_attacker_speed = Self::get_fastest_attacker_speed(&units2);
             } else {
-                &units2
-            } {
-                if u.get_attack_range() > max_range_defender {
-                    max_range_defender = u.get_attack_range();
-                }
-            }
-            for u in if defender_player == 1 {
-                &units2
-            } else {
-                &units1
-            } {
-                if u.get_movement_speed() > fastest_attacker_speed {
-                    fastest_attacker_speed = u.get_movement_speed();
-                }
+                max_range_defender = Self::get_max_range_defender(&units2);
+                fastest_attacker_speed = Self::get_fastest_attacker_speed(&units1);
             }
         }
-        //        println!("get_attack_range took {:?}", sw.elapsed_ms());
-        let mut time: f32 = combat_settings.start_time;
-        let mut changed: bool = true;
-        const MAX_ITERATIONS: u32 = 100;
-        if combat_settings.start_time == 0.00 {
-            for u in &mut units1 {
-                u.buff_timer = 0.0;
-            }
-            for u in &mut units2 {
-                u.buff_timer = 0.0;
-            }
-        }
-        //       println!("Pre-Main loop took {:?}", sw.elapsed());
-        //       let sw = Stopwatch::start_new();
+
+        //        units1.shuffle(&mut rng);
+        //        units2.shuffle(&mut rng);
+
         for it in 0..MAX_ITERATIONS {
             if !changed {
                 break;
             }
-            let mut has_air1: i32 = 0;
-            let mut has_air2: i32 = 0;
-            let mut has_ground1: i32 = 0;
-            let mut has_ground2: i32 = 0;
-            let mut ground_area1: f32 = 0.0;
-            let mut ground_area2: f32 = 0.0;
-
-            for u in &mut units1 {
-                if u.health > 0.0 {
-                    has_air1 += can_be_attacked_by_air_weapons(u) as i32;
-                    has_ground1 += !u.is_flying as i32;
-                    let r: f32 = u.get_radius();
-                    ground_area1 += r * r;
-
-                    average_health_by_time[0] += time * u.health + u.shield;
-                    average_health_by_time_weight[0] += u.health + u.shield;
+            if debug {
+                let mut total_health1 = 0.0;
+                let mut total_health2 = 0.0;
+                for u in &units1 {
+                    total_health1 += u.health + u.shield
                 }
-            }
-
-            for u in &mut units2 {
-                if u.health > 0.0 {
-                    has_air2 += can_be_attacked_by_air_weapons(u) as i32;
-                    has_ground2 += !u.is_flying as i32;
-                    let r: f32 = u.get_radius();
-                    ground_area2 += r * r;
-
-                    average_health_by_time[1] += time * u.health + u.shield;
-                    average_health_by_time_weight[1] += u.health + u.shield;
+                for u in &units2 {
+                    total_health2 += u.health + u.shield
                 }
+                println!(
+                    "units1-health={:?}, total={:?}, unit2-health={:?}, total={:?}",
+                    total_health1,
+                    units1.len(),
+                    total_health2,
+                    units2.len()
+                );
             }
+            //            let mut has_air1: i32 = 0;
+            //            let mut has_air2: i32 = 0;
+            //            let mut has_ground1: i32 = 0;
+            //            let mut has_ground2: i32 = 0;
+            //            let mut ground_area1: f32 = 0.0;
+            //            let mut ground_area2: f32 = 0.0;
+
+            let (
+                has_air1,
+                has_ground1,
+                ground_area1,
+                _average_health_by_time,
+                _average_health_by_time_weight,
+            ) = Self::get_unit_info(&units1, time);
+            average_health_by_time[0] = _average_health_by_time;
+            average_health_by_time_weight[0] = _average_health_by_time_weight;
+
+            let (
+                has_air2,
+                has_ground2,
+                ground_area2,
+                _average_health_by_time,
+                _average_health_by_time_weight,
+            ) = Self::get_unit_info(&units2, time);
+            average_health_by_time[1] = _average_health_by_time;
+            average_health_by_time_weight[1] = _average_health_by_time_weight;
+
             let surround_info1: SurroundInfo =
                 max_surround(ground_area2 * PI, has_ground2, zealot_radius);
             let surround_info2: SurroundInfo =
@@ -347,20 +767,16 @@ impl CombatPredictor {
             //            }
 
             for group in 0..2 {
-                //                let random_group: usize = if previous_group == 3{ rng.gen_range(0,2) } else { if previous_group ==1 {0} else {1} };
-                //                previous_group = random_group;
-                let random_group = group;
-                //                println!("Random group chosen == {:?}", random_group);
                 if debug {
                     println!("Processing group {:?}", group);
                 }
-                let (g1, g2): (&mut Vec<CombatUnit>, &mut Vec<CombatUnit>) = match random_group {
+                let (g1, g2): (&mut Vec<CombatUnit>, &mut Vec<CombatUnit>) = match group {
                     0 => (&mut units1, &mut units2),
                     1 => (&mut units2, &mut units1),
                     _ => unreachable!(),
                 };
 
-                let surround: SurroundInfo = if random_group == 0 {
+                let surround: SurroundInfo = if group == 0 {
                     surround_info1
                 } else {
                     surround_info2
@@ -376,7 +792,7 @@ impl CombatPredictor {
                 let mut opponent_fraction_melee_units: f32 = 0.0;
 
                 for u in g2.iter() {
-                    if u.is_melee() && u.health > 0.0 {
+                    if u.health > 0.0 && u.is_melee() {
                         opponent_fraction_melee_units += 1.0;
                     }
                 }
@@ -404,7 +820,6 @@ impl CombatPredictor {
                         continue;
                     }
 
-                    let unit_type_data = unit.type_data.as_ref().unwrap();
                     let air_dps = unit.get_dps(true);
                     let ground_dps = unit.get_dps(false);
 
@@ -522,103 +937,63 @@ impl CombatPredictor {
                         }
                     }
 
-                    let mut best_target: Option<&CombatUnit> = None;
-                    let mut best_target_index: usize = 0;
-                    let mut best_score: f32 = 0.0;
-                    let mut best_weapon: &Option<WeaponInfo> = &None;
-
-                    for (j, other) in g2.iter().enumerate() {
-                        //                        let other: &CombatUnit = &g2[j];
-                        let other_data: &UnitTypeData = other.type_data.as_ref().unwrap();
-
-                        let air_dps2: f32 = match &unit.air_weapons {
-                            Some(t) => t.get_dps(other.unit_type),
-                            None => 0.0,
-                        };
-                        let ground_dps2: f32 = match &unit.ground_weapons {
-                            Some(t) => t.get_dps(other.unit_type),
-                            None => 0.0,
-                        };
-
-                        let dps: f32 = air_dps2.max(ground_dps2);
-                        let mut score: f32 =
-                            dps * target_score(
-                                other,
-                                other_data,
-                                if random_group == 0 {
-                                    has_ground1 != 0
-                                } else {
-                                    has_ground2 != 0
-                                },
-                                if random_group == 0 {
-                                    has_air1 != 0
-                                } else {
-                                    has_air2 != 0
-                                },
-                            ) * 0.001;
-
-                        if is_unit_melee {
-                            if combat_settings.enable_surround_limits
-                                && melee_unit_attack_count[j] >= surround.max_attackers_per_defender
-                            {
-                                continue;
-                            }
-
-                            if !combat_settings.bad_micro
-                                && combat_settings.assume_reasonable_positioning
-                            {
-                                score = -score;
-                            }
-                            if combat_settings.enable_melee_blocking && other.is_melee() {
-                                score += 1000.00;
-                            } else if combat_settings.enable_melee_blocking
-                                && unit_type_data.get_movement_speed()
-                                    < 1.05 * other_data.get_movement_speed()
-                            {
-                                score += 500.00;
-                            }
+                    //                    let mut best_target: Option<&CombatUnit> = None;
+                    //                    let mut best_target_index: usize = 0;
+                    //                    let mut best_score: f32 = 0.0;
+                    //                    let mut best_weapon: &Option<WeaponInfo> = &None;
+                    //                    let mut best_dps: f32 = 0.0;
+                    let has_ground: bool = if group == 0 {
+                        has_ground1 != 0
+                    } else {
+                        has_ground2 != 0
+                    };
+                    let has_air: bool = if group == 0 {
+                        has_air1 != 0
+                    } else {
+                        has_air2 != 0
+                    };
+                    let _best_weapon: Option<&WeaponInfo> = if air_dps > ground_dps {
+                        unit.air_weapons.as_ref()
+                    } else {
+                        unit.ground_weapons.as_ref()
+                    };
+                    let (best_target, best_target_index, best_weapon, best_dps) =
+                        if combat_settings.multi_threaded {
+                            Self::find_best_target(
+                                unit,
+                                g2,
+                                combat_settings,
+                                has_ground,
+                                has_air,
+                                is_unit_melee,
+                                &melee_unit_attack_count,
+                                &surround,
+                                opponent_fraction_melee_units,
+                                _best_weapon,
+                            )
                         } else {
-                            if !unit.is_flying {
-                                let range_diff: f32 =
-                                    other.get_attack_range() - unit.get_attack_range();
-                                if opponent_fraction_melee_units > 0.5 && range_diff > 0.5 {
-                                    score -= 1000.00;
-                                } else if opponent_fraction_melee_units > 0.3 && range_diff > 1.0 {
-                                    score -= 1000.00
-                                }
-                            }
-                        }
-
-                        match best_target {
-                            None => {
-                                if score > best_score {
-                                    best_score = score;
-                                    best_target = Some(other);
-                                    best_target_index = j;
-                                    best_weapon = if ground_dps > air_dps {
-                                        &unit.ground_weapons
-                                    } else {
-                                        &unit.air_weapons
-                                    };
-                                }
-                            }
-                            Some(t) => {
-                                if (score - best_score).abs() < EPSILON
-                                    && unit.health + unit.shield < t.health + t.shield
-                                {
-                                    best_score = score;
-                                    best_target = Some(other);
-                                    best_target_index = j;
-                                    best_weapon = if ground_dps > air_dps {
-                                        &unit.ground_weapons
-                                    } else {
-                                        &unit.air_weapons
-                                    }
-                                }
-                            }
-                        }
+                            Self::find_best_target_multi_threaded(
+                                unit,
+                                g2,
+                                combat_settings,
+                                has_ground,
+                                has_air,
+                                is_unit_melee,
+                                &melee_unit_attack_count,
+                                &surround,
+                                opponent_fraction_melee_units,
+                                _best_weapon,
+                            )
+                        };
+                    if debug {
+                        println!(
+                            "Best unit={:?}, health={:?}, for unit={:?},health={:?}",
+                            best_target.unwrap().unit_type,
+                            best_target.unwrap().health,
+                            unit.unit_type,
+                            unit.health
+                        );
                     }
-
                     if best_target.is_some() {
                         if is_unit_melee {
                             num_melee_units_used += 1;
@@ -630,10 +1005,10 @@ impl CombatPredictor {
 
                         let other: &mut CombatUnit = g2[best_target_index].borrow_mut();
                         changed = true;
-                        let mut rng = rand::thread_rng();
+                        //                        let rng = rand::thread_rng();
 
                         //                            let shielded: bool = !is_unit_melee && val < guardian_shield_unit_fraction[(1 - random_group) as usize];
-                        let dps: f32 = best_weapon.as_ref().unwrap().get_dps(other.unit_type)
+                        let dps: f32 = best_dps//best_weapon.as_ref().unwrap().get_dps(other.unit_type)
                             * remaining_splash.max(1.0);
                         let damage_multiplier: f32 = 1.0;
                         if debug {
@@ -651,14 +1026,16 @@ impl CombatPredictor {
                         }
 
                         if other.health == 0.0 {
-                            let last_element: usize = g2.len() - 1;
-                            g2.swap(best_target_index, last_element);
-
-                            melee_unit_attack_count[best_target_index] =
-                                *melee_unit_attack_count.last().unwrap();
-                            g2.pop();
-                            melee_unit_attack_count.pop();
-//                            best_target = None;
+                            g2.swap_remove(best_target_index);
+                            melee_unit_attack_count.swap_remove(best_target_index);
+                            //                            let last_element: usize = g2.len() - 1;
+                            //                            g2.swap(best_target_index, last_element);
+                            //
+                            //                            melee_unit_attack_count[best_target_index] =
+                            //                                *melee_unit_attack_count.last().unwrap();
+                            //                            g2.pop();
+                            //                            melee_unit_attack_count.pop();
+                            //                            best_target = None;
                         }
                     }
                 }
@@ -678,16 +1055,8 @@ impl CombatPredictor {
         }
 
         //        println!("Main loop took {:?}", sw.elapsed());
-        average_health_by_time[0] /= if average_health_by_time_weight[0] > 0.01 {
-            average_health_by_time_weight[0]
-        } else {
-            0.01
-        };
-        average_health_by_time[1] /= if average_health_by_time_weight[1] > 0.01 {
-            average_health_by_time_weight[1]
-        } else {
-            0.01
-        };
+        average_health_by_time[0] /= average_health_by_time_weight[0].max(0.01);
+        average_health_by_time[1] /= average_health_by_time_weight[1].max(0.01);
 
         if debug {
             println!(
@@ -718,24 +1087,17 @@ impl CombatPredictor {
         }
     }
 }
-pub fn target_score(
-    unit: &CombatUnit,
-    type_data: &UnitTypeData,
-    has_ground: bool,
-    has_air: bool,
-) -> f32 {
-    const VESPENE_MULTIPLIER: f32 = 1.5;
-    //    let unit_type_data: &UnitTypeData = unit.type_data.as_ref().unwrap();
+
+pub fn target_score(unit: &CombatUnit, has_ground: bool, has_air: bool) -> f32 {
     let mut score: f32 = 0.0;
-    let cost: f32 = type_data.get_mineral_cost() as f32
-        + VESPENE_MULTIPLIER * type_data.get_vespene_cost() as f32;
+    let cost: f32 = unit.get_adjusted_cost();
 
     let air_dps: f32 = unit.get_dps(true);
     let ground_dps: f32 = unit.get_dps(false);
 
     score += 0.01 * cost;
 
-    score += 1000.00 * air_dps.max(ground_dps);
+    score += 1000.00 * unit.get_max_dps();
 
     if !has_air && ground_dps == 0.0 || !has_ground && air_dps == 0.0 {
         score *= 0.01;
@@ -752,5 +1114,216 @@ pub fn time_to_be_able_to_attack(unit: &CombatUnit, distance_to_enemy: f32) -> f
         }
     } else {
         10000.0
+    }
+}
+
+#[cfg(test)] // Only compiles when running tests
+mod tests {
+    use super::*;
+    #[allow(unused_imports)]
+    use test::Bencher;
+    #[bench]
+    fn bench_combat_predictor_10_units(b: &mut Bencher) {
+        // Setup
+        let mut file = File::open("D:\\Rust\\Combat Simulator\\game_info.json").unwrap();
+
+        let mut contents = String::with_capacity(10000);
+        file.read_to_string(&mut contents).unwrap();
+
+        let game_info: GameInfo = serde_json::from_str(contents.as_ref()).unwrap();
+        let mut cp = CombatPredictor::nop_new(
+            game_info,
+            Some(
+                "D:\\Rust\\Combat Simulator\\sc2-techtree\\data\\data.json"
+                    .parse()
+                    .unwrap(),
+            ),
+        );
+        let combat_unit1: CombatUnit = CombatUnit::nop_new(
+            1,
+            UnitTypeId::MARINE,
+            45.0,
+            45.0,
+            0.0,
+            0.0,
+            0.0,
+            false,
+            0.0,
+            None,
+        );
+        let combat_unit2: CombatUnit = CombatUnit::nop_new(
+            1,
+            UnitTypeId::ROACH,
+            145.0,
+            145.0,
+            0.0,
+            0.0,
+            0.0,
+            false,
+            0.0,
+            None,
+        );
+        let combat_units1: Vec<CombatUnit> = vec![combat_unit1.clone(); 10];
+
+        let combat_units2: Vec<CombatUnit> = vec![combat_unit2.clone(); 10];
+
+        let combat_settings = CombatSettings {
+            bad_micro: false,
+            debug: false,
+            enable_splash: false,
+            enable_timing_adjustment: false,
+            enable_surround_limits: false,
+            enable_melee_blocking: false,
+            workers_do_no_damage: false,
+            assume_reasonable_positioning: false,
+            max_time: 0.0,
+            start_time: 0.0,
+            multi_threaded: true,
+        };
+        // Run bench
+        b.iter(|| {
+            cp._predict_engage(
+                combat_units1.clone(),
+                combat_units2.clone(),
+                1,
+                &combat_settings,
+            )
+        });
+    }
+    #[bench]
+    fn bench_combat_predictor_100_units(b: &mut Bencher) {
+        // Setup
+        let mut file = File::open("D:\\Rust\\Combat Simulator\\game_info.json").unwrap();
+
+        let mut contents = String::with_capacity(10000);
+        file.read_to_string(&mut contents).unwrap();
+
+        let game_info: GameInfo = serde_json::from_str(contents.as_ref()).unwrap();
+        let mut cp = CombatPredictor::nop_new(
+            game_info,
+            Some(
+                "D:\\Rust\\Combat Simulator\\sc2-techtree\\data\\data.json"
+                    .parse()
+                    .unwrap(),
+            ),
+        );
+        let combat_unit1: CombatUnit = CombatUnit::nop_new(
+            1,
+            UnitTypeId::MARINE,
+            45.0,
+            45.0,
+            0.0,
+            0.0,
+            0.0,
+            false,
+            0.0,
+            None,
+        );
+        let combat_unit2: CombatUnit = CombatUnit::nop_new(
+            1,
+            UnitTypeId::ROACH,
+            145.0,
+            145.0,
+            0.0,
+            0.0,
+            0.0,
+            false,
+            0.0,
+            None,
+        );
+        let combat_units1: Vec<CombatUnit> = vec![combat_unit1.clone(); 100];
+
+        let combat_units2: Vec<CombatUnit> = vec![combat_unit2.clone(); 100];
+
+        let combat_settings = CombatSettings {
+            bad_micro: false,
+            debug: false,
+            enable_splash: false,
+            enable_timing_adjustment: false,
+            enable_surround_limits: false,
+            enable_melee_blocking: false,
+            workers_do_no_damage: false,
+            assume_reasonable_positioning: false,
+            max_time: 0.0,
+            start_time: 0.0,
+            multi_threaded: true,
+        };
+        // Run bench
+        b.iter(|| {
+            cp._predict_engage(
+                combat_units1.clone(),
+                combat_units2.clone(),
+                1,
+                &combat_settings,
+            )
+        });
+    }
+    #[bench]
+    fn bench_combat_predictor_1000_units(b: &mut Bencher) {
+        // Setup
+        let mut file = File::open("D:\\Rust\\Combat Simulator\\game_info.json").unwrap();
+
+        let mut contents = String::with_capacity(10000);
+        file.read_to_string(&mut contents).unwrap();
+
+        let game_info: GameInfo = serde_json::from_str(contents.as_ref()).unwrap();
+        let mut cp = CombatPredictor::nop_new(
+            game_info,
+            Some(
+                "D:\\Rust\\Combat Simulator\\sc2-techtree\\data\\data.json"
+                    .parse()
+                    .unwrap(),
+            ),
+        );
+        let combat_unit1: CombatUnit = CombatUnit::nop_new(
+            1,
+            UnitTypeId::MARINE,
+            45.0,
+            45.0,
+            0.0,
+            0.0,
+            0.0,
+            false,
+            0.0,
+            None,
+        );
+        let combat_unit2: CombatUnit = CombatUnit::nop_new(
+            1,
+            UnitTypeId::ROACH,
+            145.0,
+            145.0,
+            0.0,
+            0.0,
+            0.0,
+            false,
+            0.0,
+            None,
+        );
+        let combat_units1: Vec<CombatUnit> = vec![combat_unit1.clone(); 1000];
+
+        let combat_units2: Vec<CombatUnit> = vec![combat_unit2.clone(); 1000];
+
+        let combat_settings = CombatSettings {
+            bad_micro: false,
+            debug: false,
+            enable_splash: false,
+            enable_timing_adjustment: false,
+            enable_surround_limits: false,
+            enable_melee_blocking: false,
+            workers_do_no_damage: false,
+            assume_reasonable_positioning: false,
+            max_time: 0.0,
+            start_time: 0.0,
+            multi_threaded: true,
+        };
+        // Run bench
+        b.iter(|| {
+            cp._predict_engage(
+                combat_units1.clone(),
+                combat_units2.clone(),
+                1,
+                &combat_settings,
+            )
+        });
     }
 }

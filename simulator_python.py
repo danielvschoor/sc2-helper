@@ -554,14 +554,15 @@ def max_surround(enemy_ground_unit_area: float, enemy_ground_units: int, unit_ra
 class CombatUnit(Unit):
     def __init__(self, unit=None,owner=None,type=None, health=None, flying=None, data_cache=None):
         # self.cache = {}
-        # if not data_cache:
-        #     data_cache = DataCache
-        # self.data_cache = DataCache()
+        if not data_cache:
+            data_cache = DataCache()
+        self.data_cache = data_cache
         
         # self._data = None
         # self._data_dict = None
         if unit:
             self._proto = unit._proto
+            self.type_data = unit.type_data
             self._bot_object = unit._bot_object
             super().__init__(self._proto, self._bot_object)
             self._owner = self.owner_id
@@ -575,6 +576,7 @@ class CombatUnit(Unit):
             self._is_flying = self._proto.is_flying
             
         elif owner is not None and type and health and flying is not None:
+            
             self._owner = owner
             self._health_max = health
             self._health = health
@@ -584,7 +586,9 @@ class CombatUnit(Unit):
             self._is_flying = flying
             self._type = type
             self._buff_timer = 0
-        
+            self.type_data = self.data_cache.get_raw_unit_data(self._type)
+            print(self.type_data)
+
         else:
             self._owner = 0
             self._health_max = 0
@@ -691,7 +695,8 @@ class CombatUnit(Unit):
                     _shield_max=self.shield_max,
                     _energy=self.energy, 
                     _flying=self.is_flying, 
-                    _buff_timer=self.buff_timer)
+                    _buff_timer=self.buff_timer,
+                    _type_data = self.type_data)
 
 
 def make_unit(owner:int, type:UnitTypeId, tech_tree=None):

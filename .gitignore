@@ -3,3 +3,4 @@
 rust_lib/target
 .vscode
 sc2_helper.pyd
+rust_lib/src/map_analyzer

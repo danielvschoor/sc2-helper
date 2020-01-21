@@ -3,13 +3,15 @@ base_data = [
     "use pyo3::{FromPyObject, PyResult, ObjectProtocol, PyObject, ToPyObject, Python, FromPy, IntoPy};",
     "use pyo3::types::{PyAny};",
     "use pyo3::derive_utils::IntoPyResult;",
-    "use std::fmt;"
-    "use sc2_techtree::{UnitTypeId as UTI, AbilityId as AI, UpgradeId as UI };"
+    "use std::fmt;",
+    "use sc2_techtree::{UnitTypeId as UTI, AbilityId as AI, UpgradeId as UI };",
+    "use serde::{Deserialize, Serialize};"
+
     ]
 
 macros = [
     "#[allow(missing_docs)]",
-    "#[derive(Primitive,Debug, Eq, PartialEq, Copy, Clone, Hash)]",
+    "#[derive(Primitive,Debug, Eq, PartialEq, Copy, Clone, Hash,Serialize, Deserialize)]",
     "#[allow(non_camel_case_types)]",
     "#[allow(dead_code)]"
     ]

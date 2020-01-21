@@ -3,10 +3,11 @@ use pyo3::derive_utils::IntoPyResult;
 use pyo3::types::PyAny;
 use pyo3::{FromPy, FromPyObject, IntoPy, ObjectProtocol, PyObject, PyResult, Python, ToPyObject};
 use sc2_techtree::{AbilityId as AI, UnitTypeId as UTI, UpgradeId as UI};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 #[allow(missing_docs)]
-#[derive(Primitive, Debug, Eq, PartialEq, Copy, Clone, Hash)]
+#[derive(Primitive, Debug, Eq, PartialEq, Copy, Clone, Hash, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
 #[allow(dead_code)]
 pub enum AbilityId {
@@ -1309,7 +1310,7 @@ impl AbilityId {
 }
 
 #[allow(missing_docs)]
-#[derive(Primitive, Debug, Eq, PartialEq, Copy, Clone, Hash)]
+#[derive(Primitive, Debug, Eq, PartialEq, Copy, Clone, Hash, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
 #[allow(dead_code)]
 pub enum UnitTypeId {
@@ -3335,7 +3336,7 @@ impl UnitTypeId {
 }
 
 #[allow(missing_docs)]
-#[derive(Primitive, Debug, Eq, PartialEq, Copy, Clone, Hash)]
+#[derive(Primitive, Debug, Eq, PartialEq, Copy, Clone, Hash, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
 #[allow(dead_code)]
 pub enum BuffId {
@@ -3665,7 +3666,7 @@ impl<'source> FromPyObject<'source> for BuffId {
 }
 
 #[allow(missing_docs)]
-#[derive(Primitive, Debug, Eq, PartialEq, Copy, Clone, Hash)]
+#[derive(Primitive, Debug, Eq, PartialEq, Copy, Clone, Hash, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
 #[allow(dead_code)]
 pub enum EffectId {
@@ -3714,7 +3715,7 @@ impl<'source> FromPyObject<'source> for EffectId {
 }
 
 #[allow(missing_docs)]
-#[derive(Primitive, Debug, Eq, PartialEq, Copy, Clone, Hash)]
+#[derive(Primitive, Debug, Eq, PartialEq, Copy, Clone, Hash, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
 #[allow(dead_code)]
 pub enum UpgradeId {

@@ -24,6 +24,12 @@ class DataCache:
             unit_type = unit_type.value
         return UnitInfo(self.unit_data.get(unit_type, None))
     
+    def get_raw_unit_data(self, unit_type):
+        if isinstance(unit_type, UnitTypeId):
+            unit_type = unit_type.value
+        return self.unit_data.get(unit_type, None)
+        
+
     def get_data_as_dict(self, unit_type):
         if isinstance(unit_type, UnitTypeId):
             unit_type = unit_type.value

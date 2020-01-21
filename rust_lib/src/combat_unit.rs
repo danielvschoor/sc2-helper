@@ -1,27 +1,19 @@
-use pyo3::prelude::*;
-//use dict_derive::{FromPyObject, IntoPyObject};
 use crate::game_info::{
-    get_tech_data, CombatUpgrades, GameInfo, UnitTypeData, Weapon, WeaponInfo, WeaponTargetType,
+    get_tech_data, get_unit_data, CombatUpgrades, GameInfo, UnitTypeData, Weapon, WeaponInfo,
+    WeaponTargetType,
 };
 use crate::generated_enums::{UnitTypeId, UpgradeId};
 use crate::num_traits::FromPrimitive;
+use pyo3::prelude::*;
+use rayon::prelude::*;
 use sc2_techtree::{TechData, UnitType};
-//use std::any::Any;
-//use std::collections::HashSet;
-use cache_macro::cache;
-use lru_cache::LruCache;
 use std::borrow::Borrow;
-use std::collections::HashSet;
+use std::collections::{HashSet};
 use std::f32::EPSILON;
 use std::hash::{Hash, Hasher};
-use stopwatch::Stopwatch;
-//use std::cmp::max;
-//use crate::generated_enums::UnitTypeId::WEAPON;
-//use crate::generated_enums::UnitTypeId::WEAPON;
+use rustc_hash::FxHashSet;
 
-//use pyo3::types::PyAny;
-//use crate::game_info::{UnitInfo};
-//use pyo3::types::PyAny;
+const VESPENE_MULTIPLIER: f32 = 1.5;
 lazy_static! {
     pub static ref IS_MELEE: HashSet<UnitTypeId> = [
         UnitTypeId::PROBE,
@@ -94,6 +86,14 @@ pub struct CombatUnit {
     pub ground_weapons: Option<WeaponInfo>,
     movement_speed: Option<f32>,
     unit_radius: Option<f32>,
+    can_be_attacked_by_air_weapons: Option<bool>,
+    attack_range: Option<f32>,
+    air_dps: Option<f32>,
+    ground_dps: Option<f32>,
+    max_dps: Option<f32>,
+    mineral_cost: Option<f32>,
+    vespene_cost: Option<f32>,
+    adjusted_cost: Option<f32>,
 }
 impl Hash for CombatUnit {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -110,6 +110,46 @@ impl PartialEq for CombatUnit {
 }
 impl Eq for CombatUnit {}
 
+impl CombatUnit {
+    pub(crate) fn nop_new(
+        _owner: i32,
+        _unit_type: UnitTypeId,
+        _health: f32,
+        mut _health_max: f32,
+        _shield: f32,
+        mut _shield_max: f32,
+        mut _energy: f32,
+        _flying: bool,
+        mut _buff_timer: f32,
+        _type_data: Option<UnitTypeData>,
+    ) -> Self {
+        CombatUnit {
+            owner: _owner,
+            unit_type: _unit_type,
+            health: _health,
+            is_flying: _flying,
+            buff_timer: _buff_timer,
+            energy: _energy,
+            health_max: _health_max,
+            shield_max: _shield_max,
+            shield: _shield,
+            air_weapons: None,
+            tech_data: None,
+            type_data: _type_data,
+            ground_weapons: None,
+            movement_speed: None,
+            unit_radius: None,
+            can_be_attacked_by_air_weapons: None,
+            attack_range: None,
+            max_dps: None,
+            mineral_cost: None,
+            air_dps: None,
+            ground_dps: None,
+            vespene_cost: None,
+            adjusted_cost: None,
+        }
+    }
+}
 #[pymethods]
 impl CombatUnit {
     fn dup(&self) -> Self {
@@ -129,9 +169,16 @@ impl CombatUnit {
             ground_weapons: self.ground_weapons.clone(),
             movement_speed: None,
             unit_radius: None,
+            can_be_attacked_by_air_weapons: None,
+            attack_range: None,
+            air_dps: None,
+            ground_dps: None,
+            max_dps: None,
+            mineral_cost: None,
+            vespene_cost: None,
+            adjusted_cost: None,
         }
     }
-    //    #[args(_owner, _unit_type, _health, _health_max=0.0, _shield, _shield_max=0.0, _energy=0.0, _flying, _buff_timer=0.0)]
     #[new]
     fn new(
         obj: &PyRawObject,
@@ -144,6 +191,7 @@ impl CombatUnit {
         mut _energy: Option<f32>,
         _flying: bool,
         mut _buff_timer: Option<f32>,
+        _type_data: UnitTypeData,
     ) {
         obj.init(CombatUnit {
             owner: _owner,
@@ -157,10 +205,18 @@ impl CombatUnit {
             shield: _shield,
             air_weapons: None,
             tech_data: None,
-            type_data: None,
+            type_data: Some(_type_data),
             ground_weapons: None,
             movement_speed: None,
             unit_radius: None,
+            can_be_attacked_by_air_weapons: None,
+            attack_range: None,
+            air_dps: None,
+            ground_dps: None,
+            max_dps: None,
+            mineral_cost: None,
+            vespene_cost: None,
+            adjusted_cost: None,
         })
     }
     fn show_unit_type(&self) -> PyResult<String> {
@@ -169,50 +225,140 @@ impl CombatUnit {
 }
 impl CombatUnit {
     pub fn can_be_attacked_by_air_weapons(&self) -> bool {
-        self.is_flying || self.unit_type == UnitTypeId::COLOSSUS
+        self.can_be_attacked_by_air_weapons.unwrap()
     }
 
     pub fn get_movement_speed(&self) -> f32 {
-        self.type_data.as_ref().unwrap().get_movement_speed()
+        self.movement_speed.unwrap()
     }
+
     pub fn get_radius(&self) -> f32 {
-        self.tech_data.as_ref().unwrap().radius.into()
+        self.unit_radius.unwrap()
     }
 
     pub fn get_attack_range(&self) -> f32 {
-        let ground_range: f32 = match &self.ground_weapons {
-            Some(t) => t.get_range(),
-            None => 0.0,
-        };
-        let air_range: f32 = match &self.air_weapons {
-            Some(t) => t.get_range(),
-            None => 0.0,
-        };
-        ground_range.max(air_range)
+        self.attack_range.unwrap()
     }
 
     pub fn get_name(&self) -> &str {
         self.type_data.as_ref().unwrap().get_name()
     }
-    #[inline]
+
     pub fn is_melee(&self) -> bool {
         IS_MELEE.contains(self.unit_type.borrow())
     }
 
-    #[inline]
     pub fn is_basic_harvester(&self) -> bool {
         IS_BASIC_HARVESTER.contains(self.unit_type.borrow())
     }
 
+    pub fn load_attributes(&mut self) {
+        match self.movement_speed {
+            None => {
+                self.movement_speed = Some(self.type_data.as_ref().unwrap().get_movement_speed());
+            }
+            _ => {}
+        }
+
+        match self.attack_range {
+            None => {
+                let ground_range: f32 = match &self.ground_weapons {
+                    Some(t) => t.get_range(),
+                    None => 0.0,
+                };
+                let air_range: f32 = match &self.air_weapons {
+                    Some(t) => t.get_range(),
+                    None => 0.0,
+                };
+                self.attack_range = Some(ground_range.max(air_range));
+            }
+            _ => {}
+        };
+
+        match self.can_be_attacked_by_air_weapons {
+            None => {
+                self.can_be_attacked_by_air_weapons =
+                    Some(self.is_flying || self.unit_type == UnitTypeId::COLOSSUS)
+            }
+            _ => {}
+        };
+        match self.unit_radius {
+            None => {
+                self.unit_radius = Some(self.tech_data.as_ref().unwrap().radius.into());
+            }
+            _ => {}
+        };
+        match self.air_dps {
+            None => {
+                let air_weapon_dps: f32 = match &self.air_weapons {
+                    Some(t) => t.base_dps,
+                    None => 0.0,
+                };
+                self.air_dps = Some(air_weapon_dps)
+            }
+            _ => {}
+        }
+
+        match self.ground_dps {
+            None => {
+                let ground_weapon_dps: f32 = match &self.ground_weapons {
+                    Some(t) => t.base_dps,
+                    None => 0.0,
+                };
+
+                self.ground_dps = Some(ground_weapon_dps)
+            }
+            _ => {}
+        }
+        match self.max_dps {
+            None => self.max_dps = Some(self.air_dps.unwrap().max(self.ground_dps.unwrap())),
+            _ => {}
+        }
+        match self.mineral_cost {
+            None => {
+                self.mineral_cost = Some(self.type_data.as_ref().unwrap().get_mineral_cost() as f32)
+            }
+            _ => {}
+        }
+        match self.vespene_cost {
+            None => {
+                self.vespene_cost = Some(self.type_data.as_ref().unwrap().get_vespene_cost() as f32)
+            }
+            _ => {}
+        }
+        match self.adjusted_cost {
+            None => {
+                self.adjusted_cost =
+                    Some(self.get_mineral_cost() + VESPENE_MULTIPLIER * self.get_vespene_cost())
+            }
+            _ => {}
+        }
+    }
+
+    pub fn get_adjusted_cost(&self) -> f32 {
+        self.adjusted_cost.unwrap()
+    }
+    pub fn get_max_dps(&self) -> f32 {
+        self.max_dps.unwrap()
+    }
+
+    pub fn get_mineral_cost(&self) -> f32 {
+        self.mineral_cost.unwrap()
+    }
+    pub fn get_vespene_cost(&self) -> f32 {
+        self.vespene_cost.unwrap()
+    }
     pub fn load_data(
         &mut self,
         data: &GameInfo,
         tech_tree: &TechData,
         _upgrades: Option<&CombatUpgrades>,
         _target_upgrades: Option<&CombatUpgrades>,
-        unit_types_scope: &HashSet<usize>,
+        unit_types_scope: &FxHashSet<usize>,
+        multi_threaded: bool,
     ) {
-        //        let sw1 = Stopwatch::start_new();
+        //        let data = &data;
+        //        let tech_tree = &tech_tree;
         let upgrades: CombatUpgrades = match _upgrades {
             None => CombatUpgrades::new(vec![]),
             Some(t) => t.clone(),
@@ -225,92 +371,162 @@ impl CombatUnit {
 
         self.tech_data = Some(get_tech_data(self.unit_type, tech_tree));
 
-        self.type_data = match data.get_unit_data(self.unit_type) {
-            Some(t) => Some(t.clone()),
-            None => {
-                println!("Unit data for {:?} is none", self.unit_type);
-                None
-            }
-        };
-        //        let before_init_weapons = sw1.elapsed();
-        //        let sw2 = Stopwatch::start_new();
+        if self.type_data.is_none() {
+            self.type_data = Some(get_unit_data(self.unit_type, data));
+            //                match data.get_unit_data(self.unit_type) {
+            //                Some(t) => Some(t.clone()),
+            //                None => {
+            //                    println!("Unit data for {:?} is none", self.unit_type);
+            //                    None
+            //                }
+            //            }
+        }
         self.init_weapons(
             data,
             tech_tree,
             &upgrades,
             &target_upgrades,
             unit_types_scope,
+            multi_threaded,
         );
+        self.load_attributes();
         //        let after_init_weapons = sw2.elapsed();
         //        let total_time = sw1.elapsed();
         //        println!("Total time before init_weapons {:?}", before_init_weapons);
         //        println!("Total time in init_weapons {:?}", after_init_weapons);
         //        println!("Total time in load_data {:?}", total_time);
     }
+
     pub fn init_weapons(
         &mut self,
         _data: &GameInfo,
         _tech_tree: &TechData,
         _upgrades: &CombatUpgrades,
         _target_upgrades: &CombatUpgrades,
-        unit_types_scope: &HashSet<usize>,
+        unit_types_scope: &FxHashSet<usize>,
+        multi_threaded: bool,
     ) {
         //        println!("Loading weapons for {:?}, type_data: {:?}, tech_data: {:?}", self.unit_type, self.type_data.is_some(), self.tech_data.is_some());
         let unwrapped_type_data = self.type_data.as_ref().unwrap();
 
         let unwrapped_tech_data = self.tech_data.as_ref().unwrap();
 
-        for weapon in unwrapped_type_data.get_weapons() {
-            let target_type: WeaponTargetType = weapon.get_target_type();
-            if target_type == WeaponTargetType::AIR || target_type == WeaponTargetType::ANY {
-                self.air_weapons = Some(get_new_weapons(
-                    weapon,
-                    self.unit_type,
-                    _upgrades,
-                    _target_upgrades,
-                    unwrapped_type_data,
-                    unwrapped_tech_data,
-                    _data,
-                    _tech_tree,
-                    unit_types_scope,
-                    true,
-                ));
-            }
+        //        let mut air_weapons: Option<WeaponInfo> = None;
+        //        let mut ground_weapons: Option<WeaponInfo> = None;
+        //        self.ground_weapons = unwrapped_type_data.get_weapons().par_iter().map(|weapon|{
+        ////            let target_type: WeaponTargetType = weapon.get_target_type();
+        //            get_new_weapons(
+        //                    weapon,
+        //                    self.unit_type.clone(),
+        //                    _upgrades,
+        //                    _target_upgrades,
+        //                    unwrapped_type_data,
+        //                    unwrapped_tech_data,
+        //                    _data,
+        //                    _tech_tree,
+        //                    unit_types_scope,
+        //                )
+        //
+        //
+        //        }).find_any(|x| x.get_target_type() == WeaponTargetType::GROUND || x.get_target_type() == WeaponTargetType::ANY);
 
-            if target_type == WeaponTargetType::GROUND || target_type == WeaponTargetType::ANY {
-                self.ground_weapons = Some(get_new_weapons(
-                    weapon,
-                    self.unit_type,
-                    _upgrades,
-                    _target_upgrades,
-                    unwrapped_type_data,
-                    unwrapped_tech_data,
-                    _data,
-                    _tech_tree,
-                    unit_types_scope,
-                    false,
-                ));
+        //            self.air_weapons =
+        if multi_threaded {
+            let weapons: Vec<(WeaponTargetType, Option<WeaponInfo>)> = unwrapped_type_data
+                .get_weapons()
+                .par_iter()
+                .map(|weapon| {
+                    (
+                        weapon.get_target_type(),
+                        Some(get_new_weapons(
+                            weapon,
+                            self.unit_type.clone(),
+                            _upgrades,
+                            _target_upgrades,
+                            unwrapped_type_data,
+                            unwrapped_tech_data,
+                            _data,
+                            _tech_tree,
+                            unit_types_scope,
+                            multi_threaded,
+                        )),
+                    )
+                })
+                .collect();
+            for (target_type, weapon) in weapons {
+                if target_type == WeaponTargetType::AIR || target_type == WeaponTargetType::ANY {
+                    self.air_weapons = weapon.clone();
+                };
+                if target_type == WeaponTargetType::GROUND || target_type == WeaponTargetType::ANY {
+                    self.ground_weapons = weapon.clone();
+                }
+            }
+        }
+        //         self.ground_weapons = unwrapped_type_data.get_weapons().par_iter().map(|weapon|{
+        //            let target_type: WeaponTargetType = weapon.get_target_type();
+        //             if target_type ==  WeaponTargetType::AIR || target_type == WeaponTargetType::ANY{
+        //                 get_new_weapons(
+        //                     weapon,
+        //                     self.unit_type.clone(),
+        //                     _upgrades,
+        //                     _target_upgrades,
+        //                     unwrapped_type_data,
+        //                     unwrapped_tech_data,
+        //                     _data,
+        //                     _tech_tree,
+        //                     unit_types_scope,
+        //                 )
+        //             }
+        //             else{
+        //                 None
+        //             }
+        //        }).collect();
+
+        //        self.air_weapons = weapons.iter().filter(|x| x.get_target_type() == WeaponTargetType::AIR || x.get_target_type() == WeaponTargetType::ANY);
+        //        self.ground_weapons= weapons.iter().filter(|x| x.get_target_type() == WeaponTargetType::GROUND || x.get_target_type() == WeaponTargetType::ANY)
+        else {
+            for weapon in unwrapped_type_data.get_weapons() {
+                let target_type: WeaponTargetType = weapon.get_target_type();
+                if target_type == WeaponTargetType::AIR || target_type == WeaponTargetType::ANY {
+                    self.air_weapons = Some(get_new_weapons(
+                        weapon,
+                        self.unit_type,
+                        _upgrades,
+                        _target_upgrades,
+                        unwrapped_type_data,
+                        unwrapped_tech_data,
+                        _data,
+                        _tech_tree,
+                        unit_types_scope,
+                        multi_threaded,
+                    ));
+                }
+
+                if target_type == WeaponTargetType::GROUND || target_type == WeaponTargetType::ANY {
+                    self.ground_weapons = Some(get_new_weapons(
+                        weapon,
+                        self.unit_type,
+                        _upgrades,
+                        _target_upgrades,
+                        unwrapped_type_data,
+                        unwrapped_tech_data,
+                        _data,
+                        _tech_tree,
+                        unit_types_scope,
+                        multi_threaded,
+                    ));
+                }
             }
         }
         //        println!("Loading weapons complete");
     }
+
     pub fn get_dps(&self, air: bool) -> f32 {
         if air {
-            let air_weapon_dps: f32 = match &self.air_weapons {
-                Some(t) => t.base_dps,
-                None => 0.0,
-            };
-            air_weapon_dps
+            self.air_dps.unwrap()
         } else {
-            let ground_weapon_dps: f32 = match &self.ground_weapons {
-                Some(t) => t.base_dps,
-                None => 0.0,
-            };
-
-            ground_weapon_dps
+            self.ground_dps.unwrap()
         }
-
-        //        if ground_weapon_dps > air_weapon_dps {ground_weapon_dps} else {air_weapon_dps}
     }
 
     pub fn modify_health(&mut self, mut delta: f32) {
@@ -335,12 +551,14 @@ impl CombatUnit {
 }
 
 pub fn clone_vec(vec: Vec<&CombatUnit>) -> Vec<CombatUnit> {
+    //    let cache = LruCache::with_hasher(100,BuildHasherDefault::<FnvHasher>::default());
+    //    BuildHasherDefault::<FxHasher>::default()
     vec.into_iter().cloned().collect()
 }
 
-#[cache(LruCache : LruCache::new(100))]
-#[cache_cfg(ignore_args = _weapon, _tech_tree, _data, _unit_data, _unit_tech_tree, _unit_types_scope)]
-#[cache_cfg(thread_local)]
+//#[cache(LruCache : LruCache::new(1000))]
+//#[cache_cfg(ignore_args = _weapon, _tech_tree, _data, _unit_data, _unit_tech_tree, _unit_types_scope)]
+//#[cache_cfg(thread_local)]
 pub fn get_new_weapons(
     _weapon: &Weapon,
     _type: UnitTypeId,
@@ -350,8 +568,8 @@ pub fn get_new_weapons(
     _unit_tech_tree: &UnitType,
     _data: &GameInfo,
     _tech_tree: &TechData,
-    _unit_types_scope: &HashSet<usize>,
-    air: bool,
+    _unit_types_scope: &FxHashSet<usize>,
+    multi_threaded: bool,
 ) -> WeaponInfo {
     WeaponInfo::new(
         _weapon,
@@ -363,5 +581,6 @@ pub fn get_new_weapons(
         _data,
         _tech_tree,
         _unit_types_scope,
+        multi_threaded,
     )
 }
