@@ -10,26 +10,22 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-          # Python 3.6 fails due to: https://www.python.org/dev/peps/pep-0563/
-          # If all type annotations were removed, this library should run in py3.6 and perhaps even 3.5
-          os: [macos-latest, windows-latest, ubuntu-latest]
-          python-version: [3.7, 3.8]
-    steps:
-    - uses: actions/checkout@v2
-    - name: Run tests
-      run: cargo test --verbose
+#   test:
+#     runs-on: ${{ matrix.os }}
+#     strategy:
+#       matrix:
+#           os: [macos-latest, windows-latest, ubuntu-latest]
+#           python-version: [3.7, 3.8]
+#     steps:
+#     - uses: actions/checkout@v2
+#     - name: Run tests
+#       run: cargo test --verbose
       
   maturin_build:
 
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-          # Python 3.6 fails due to: https://www.python.org/dev/peps/pep-0563/
-          # If all type annotations were removed, this library should run in py3.6 and perhaps even 3.5
           os: [macos-latest, windows-latest, ubuntu-latest]
           python-version: [3.7, 3.8]
 
@@ -44,5 +40,25 @@ jobs:
           pip install maturin
       - name: Build package
         run: |
-          maturin build
+          maturin develop --release
+  
+  release:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+          os: [macos-latest, windows-latest, ubuntu-latest]
+          python-version: [3.7, 3.8]
+    needs: [maturin_build]
+    steps:
+    - uses: actions/checkout@master
+    - name: Create release
+      uses: Roang-zero1/github-create-release-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Create GitHub release
+      uses: Roang-zero1/github-upload-release-artifacts-action@master
+      with:
+        args: sc2_helper/
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
