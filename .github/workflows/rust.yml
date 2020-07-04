@@ -38,11 +38,11 @@ jobs:
         run: |
           pip install maturin
           pip install virtualenv
-          virtualenv sc2_helper_env
-          ls ./sc2_helper_env/Scripts
+          virtualenv sc2_helper_env          
           
       - if: matrix.os == 'windows-latest'
         run: |
+          ls ./sc2_helper_env/Scripts
           ./sc2_helper_env/Scripts/activate.bat
           maturin develop --release
       - if: matrix.os == 'macos-latest'
