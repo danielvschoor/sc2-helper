@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 enum-primitive-derive = "^0.1"
-num-traits = "^0.1"
+num-traits = "^0.2"
 rand = "0.7.2"
 lazy_static = "*"
 #rayon ="*"
