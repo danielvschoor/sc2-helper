@@ -42,7 +42,7 @@ jobs:
           
       - if: matrix.os == 'windows-latest'
         run: |
-          call "sc2_helper_env/Scripts/activate.bat"
+          ./sc2_helper_env/Scripts/activate.bat
           maturin develop --release
       - if: matrix.os == 'macos-latest'
         run: |
