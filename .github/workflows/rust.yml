@@ -39,7 +39,7 @@ jobs:
           pip install maturin
           pip install virtualenv
           virtualenv sc2_helper_env
-          ls
+          ls ./sc2_helper_env
           
       - if: matrix.os == 'windows-latest'
         run: |
