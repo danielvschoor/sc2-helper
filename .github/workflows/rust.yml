@@ -22,7 +22,6 @@ jobs:
 #       run: cargo test --verbose
       
   maturin_build:
-
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -44,14 +43,14 @@ jobs:
       - if: matrix.os == 'windows-latest'
         run: |
           "sc2_helper_env/Scripts/activate"
+          maturin develop --release
       - if: matrix.os == 'macos-latest'
         run: |
           source sc2_helper_env/bin/activate
+          maturin develop --release
       - if: matrix.os == 'ubuntu-latest'
         run: |
           source sc2_helper_env/bin/activate
-      - name: Build package
-        run: |
           maturin develop --release
   
   release:
