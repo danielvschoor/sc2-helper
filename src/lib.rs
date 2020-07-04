@@ -66,7 +66,9 @@ pub fn in_circle(position: (f64, f64), tile: (usize, usize), radius: f64) -> boo
 #[pyfunction]
 fn find_points_inside_circle(
     position: (f64, f64),
-    radius: f64
+    radius: f64,
+    h: usize,
+    w: usize,
 ) -> Vec<(usize, usize)> {
     let top = max!(0.0, position.1 - radius) as usize;
     let bottom = min!(h as f64, position.1 + radius) as usize;
