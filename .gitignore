@@ -1,6 +1,7 @@
 *.pyc
 .idea
-rust_lib/target
+target
 .vscode
-sc2_helper.pyd
-rust_lib/src/map_analyzer
+*.pyd
+src/map_analyzer
+venv/
