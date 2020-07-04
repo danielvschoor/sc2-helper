@@ -5,3 +5,4 @@ target
 *.pyd
 src/map_analyzer
 venv/
+*.so
