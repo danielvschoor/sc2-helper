@@ -1,0 +1,46 @@
+name: Rust
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }
+    strategy:
+      matrix:
+          # Python 3.6 fails due to: https://www.python.org/dev/peps/pep-0563/
+          # If all type annotations were removed, this library should run in py3.6 and perhaps even 3.5
+          os: [macos-latest, windows-latest, ubuntu-latest]
+          python-version: [3.7, 3.8]
+    steps:
+    - name: Run tests
+      run: cargo test --verbose
+      
+  maturin_build:
+
+    runs-on: ${{ matrix.os }
+    strategy:
+      matrix:
+          # Python 3.6 fails due to: https://www.python.org/dev/peps/pep-0563/
+          # If all type annotations were removed, this library should run in py3.6 and perhaps even 3.5
+          os: [macos-latest, windows-latest, ubuntu-latest]
+          python-version: [3.7, 3.8]
+
+    steps:
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install maturin
+        run: |
+          pip install maturin
+      - name: Build package
+        run: |
+          maturin build
+    
