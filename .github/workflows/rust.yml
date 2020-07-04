@@ -11,7 +11,7 @@ env:
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
           # Python 3.6 fails due to: https://www.python.org/dev/peps/pep-0563/
@@ -24,7 +24,7 @@ jobs:
       
   maturin_build:
 
-    runs-on: ${{ matrix.os }
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
           # Python 3.6 fails due to: https://www.python.org/dev/peps/pep-0563/
