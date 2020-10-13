@@ -18,7 +18,7 @@ lazy_static = "*"
 serde = { version = "1.0", features = ["derive"] }
 #rustc-hash = "1.0.1"
 #serde_json ="*"
-rust-sc2 = { git="https://github.com/danielvschoor/rust-sc2.git", branch="cost", features=["rayon", "serde"]}
+rust-sc2 = { git="https://github.com/danielvschoor/rust-sc2.git", branch="cost", features=["rayon", "serde"]} # TODO change to official repo
 
 
 [dependencies.pyo3]
