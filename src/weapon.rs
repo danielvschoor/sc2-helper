@@ -1,10 +1,10 @@
-use crate::num_traits::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 
 use crate::combat_unit::CombatUnit;
-use crate::enums::Attribute;
-use crate::generated_enums::UnitTypeId;
+#[cfg(feature = "python")]
 use pyo3::{FromPy, FromPyObject, IntoPy, PyAny, PyObject, PyResult, Python, ToPyObject};
+use rust_sc2::game_data::Attribute;
+use rust_sc2::prelude::UnitTypeId;
 use std::f32::EPSILON;
 
 #[allow(missing_docs)]
@@ -20,20 +20,20 @@ impl Default for WeaponTargetType {
         WeaponTargetType::NULL
     }
 }
-
+#[cfg(feature = "python")]
 impl ToPyObject for WeaponTargetType {
     fn to_object(&self, py: Python) -> PyObject {
         self.to_i32().unwrap().to_object(py)
     }
 }
-
+#[cfg(feature = "python")]
 impl FromPy<WeaponTargetType> for PyObject {
     fn from_py(other: WeaponTargetType, py: Python) -> Self {
         let _other: i32 = other.to_i32().unwrap();
         _other.into_py(py)
     }
 }
-
+#[cfg(feature = "python")]
 impl<'source> FromPyObject<'source> for WeaponTargetType {
     fn extract(ob: &'source PyAny) -> PyResult<Self> {
         //        println!("{:?}", "Extracting WeaponTargetType");
@@ -52,6 +52,8 @@ pub struct Weapon {
     pub speed: f32,
     pub damage_bonus: Option<DamageBonus>,
 }
+
+#[cfg(feature = "python")]
 impl<'source> FromPyObject<'source> for Weapon {
     fn extract(ob: &'source PyAny) -> PyResult<Self> {
         unsafe {
@@ -105,7 +107,7 @@ impl Weapon {
         vec![air, ground]
     }
 }
-#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
+#[derive(Debug, Copy, Clone)]
 pub struct DamageBonus {
     pub(crate) attribute: Attribute,
     pub(crate) bonus: f32,
@@ -127,7 +129,7 @@ impl DamageBonus {
         self.bonus
     }
 }
-
+#[cfg(feature = "python")]
 impl<'source> FromPyObject<'source> for DamageBonus {
     fn extract(ob: &'source PyAny) -> PyResult<Self> {
         //        println!("{:?}", "Extracting DamageBonus");
@@ -175,7 +177,7 @@ impl Weapon {
 
     pub(crate) fn calculate_dps(&self, attacker: &CombatUnit, target: &CombatUnit) -> f32 {
         if self.w_type == WeaponTargetType::ANY
-            || if target.type_id == UnitTypeId::COLOSSUS || target.is_flying {
+            || if target.type_id == UnitTypeId::Colossus || target.is_flying {
                 self.w_type == WeaponTargetType::AIR
             } else {
                 !target.is_flying
@@ -184,32 +186,32 @@ impl Weapon {
             let mut dmg: f32 = self.damage;
             if let Some(bonus_damage) = self.damage_bonus {
                 match bonus_damage.attribute {
-                    Attribute::ARMORED => {
+                    Attribute::Armored => {
                         if target.is_armored {
                             dmg += bonus_damage.bonus;
                         }
                     }
-                    Attribute::BIOLOGICAL => {
+                    Attribute::Biological => {
                         if target.is_biological {
                             dmg += bonus_damage.bonus;
                         }
                     }
-                    Attribute::LIGHT => {
+                    Attribute::Light => {
                         if target.is_light {
                             dmg += bonus_damage.bonus;
                         }
                     }
-                    Attribute::MASSIVE => {
+                    Attribute::Massive => {
                         if target.is_massive {
                             dmg += bonus_damage.bonus;
                         }
                     }
-                    Attribute::MECHANICAL => {
+                    Attribute::Mechanical => {
                         if target.is_mechanical {
                             dmg += bonus_damage.bonus;
                         }
                     }
-                    Attribute::PSIONIC => {
+                    Attribute::Psionic => {
                         if target.is_psionic {
                             dmg += bonus_damage.bonus;
                         }

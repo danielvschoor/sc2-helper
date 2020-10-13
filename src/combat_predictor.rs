@@ -1,9 +1,10 @@
 use crate::combat_unit::CombatUnit;
-use crate::generated_enums::UnitTypeId;
 use crate::weapon::Weapon;
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
+use rust_sc2::prelude::UnitTypeId;
 use std::borrow::BorrowMut;
 use std::f32::consts::PI;
 use std::f32::EPSILON;
@@ -47,37 +48,36 @@ pub fn max_surround(
         max_melee_attackers,
     }
 }
-
-#[pyclass]
+#[cfg_attr(feature = "python", pyclass)]
 #[derive(Clone, Debug)]
 pub struct CombatSettings {
-    #[pyo3(get, set)]
+    #[cfg_attr(feature = "python", pyo3(get, set))]
     pub bad_micro: bool,
-    #[pyo3(get, set)]
+    #[cfg_attr(feature = "python", pyo3(get, set))]
     pub debug: bool,
-    #[pyo3(get, set)]
+    #[cfg_attr(feature = "python", pyo3(get, set))]
     pub enable_splash: bool,
-    #[pyo3(get, set)]
+    #[cfg_attr(feature = "python", pyo3(get, set))]
     pub enable_timing_adjustment: bool,
-    #[pyo3(get, set)]
+    #[cfg_attr(feature = "python", pyo3(get, set))]
     pub enable_surround_limits: bool,
-    #[pyo3(get, set)]
+    #[cfg_attr(feature = "python", pyo3(get, set))]
     pub enable_melee_blocking: bool,
-    #[pyo3(get, set)]
+    #[cfg_attr(feature = "python", pyo3(get, set))]
     pub workers_do_no_damage: bool,
-    #[pyo3(get, set)]
+    #[cfg_attr(feature = "python", pyo3(get, set))]
     pub assume_reasonable_positioning: bool,
-    #[pyo3(get, set)]
+    #[cfg_attr(feature = "python", pyo3(get, set))]
     pub max_time: f32,
-    #[pyo3(get, set)]
+    #[cfg_attr(feature = "python", pyo3(get, set))]
     pub start_time: f32,
-    #[pyo3(get, set)]
+    #[cfg_attr(feature = "python", pyo3(get, set))]
     pub multi_threaded: bool,
 }
 
-#[pymethods]
+#[cfg_attr(feature = "python", pymethods)]
 impl CombatSettings {
-    #[new]
+    #[cfg_attr(feature = "python", new)]
     pub fn new() -> Self {
         CombatSettings {
             bad_micro: false,
@@ -94,13 +94,18 @@ impl CombatSettings {
         }
     }
 }
+impl Default for CombatSettings {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
-#[pyclass]
+#[cfg_attr(feature = "python", pyclass)]
 pub struct CombatPredictor {}
 
-#[pymethods]
+#[cfg_attr(feature = "python", pymethods)]
 impl CombatPredictor {
-    #[new]
+    #[cfg_attr(feature = "python", new)]
     pub fn new() -> Self {
         CombatPredictor {}
     }
@@ -111,17 +116,31 @@ impl CombatPredictor {
         units2: Vec<CombatUnit>,
         defender_player: u32,
         settings: &CombatSettings,
-    ) -> PyResult<(u32, f32)> {
-        let (x, y) = self._predict_engage(units1, units2, defender_player, settings);
-        Ok((x, y))
+    ) -> (u32, f32) {
+        self._predict_engage(units1, units2, defender_player, settings)
     }
 }
-
+impl Default for CombatPredictor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl CombatPredictor {
     fn get_zealot_radius(&self) -> f32 {
         0.5
     }
 
+    fn get_fastest_attacker_speed(units: &[CombatUnit]) -> f32 {
+        let mut fastest_attacker_speed = 0.0;
+
+        for u in units {
+            if u.movement_speed > fastest_attacker_speed {
+                fastest_attacker_speed = u.movement_speed;
+            }
+        }
+        fastest_attacker_speed
+    }
+    #[cfg(feature = "python")]
     fn get_fastest_attacker_speed(units: &[CombatUnit]) -> f32 {
         let mut fastest_attacker_speed = 0.0;
 
@@ -142,7 +161,43 @@ impl CombatPredictor {
         }
         max_range_defender
     }
+    #[cfg(feature = "python")]
+    fn get_max_range_defender(units: &[CombatUnit]) -> f32 {
+        let mut max_range_defender: f32 = 0.0;
+        for u in units {
+            if u.get_max_range() > max_range_defender {
+                max_range_defender = u.get_max_range();
+            }
+        }
+        max_range_defender
+    }
 
+    fn get_unit_info(units: &[CombatUnit], time: f32) -> (i32, i32, f32, f32, f32) {
+        let mut has_air: i32 = 0;
+        let mut has_ground: i32 = 0;
+        let mut ground_area: f32 = 0.0;
+        let mut average_health_by_time: f32 = 0.0;
+        let mut average_health_by_time_weight: f32 = 0.0;
+        for unit in units {
+            if unit.health > 0.0 {
+                has_air += unit.can_be_attacked_by_air() as i32;
+                has_ground += !unit.is_flying as i32;
+                let r: f32 = unit.radius;
+                ground_area += r * r;
+
+                average_health_by_time += time * unit.health + unit.shield;
+                average_health_by_time_weight += unit.health + unit.shield;
+            }
+        }
+        (
+            has_air,
+            has_ground,
+            ground_area,
+            average_health_by_time,
+            average_health_by_time_weight,
+        )
+    }
+    #[cfg(feature = "python")]
     fn get_unit_info(units: &[CombatUnit], time: f32) -> (i32, i32, f32, f32, f32) {
         let mut has_air: i32 = 0;
         let mut has_ground: i32 = 0;
@@ -231,7 +286,7 @@ impl CombatPredictor {
     //
     //     (best_target, best_target_index, best_weapon, best_dps)
     // }
-
+    #[allow(clippy::too_many_arguments)]
     fn find_best_target<'a>(
         unit: &CombatUnit,
         units: &'a [CombatUnit],
@@ -299,15 +354,8 @@ impl CombatPredictor {
                     best_dps = dps;
                 }
                 Some(t) => {
-                    if (score - best_score).abs() < EPSILON
+                    if (score > best_score || (score - best_score).abs() < EPSILON)
                         && unit.health + unit.shield < t.health + t.shield
-                    {
-                        best_score = score;
-                        best_target = Some(other);
-                        best_target_index = j;
-                        best_dps = dps;
-                        best_weapon = _best_weapon;
-                    } else if score > best_score && unit.health + unit.shield < t.health + t.shield
                     {
                         best_score = score;
                         best_target = Some(other);
@@ -484,7 +532,7 @@ impl CombatPredictor {
                                  air_dps);
                     }
 
-                    if unit.type_id == UnitTypeId::MEDIVAC {
+                    if unit.type_id == UnitTypeId::Medivac {
                         if unit.energy > 0.0 {
                             let offset: usize = rand::random::<usize>() % g1_len;
 
@@ -698,7 +746,37 @@ pub fn target_score(unit: &CombatUnit, has_ground: bool, has_air: bool) -> f32 {
     }
     score
 }
+#[cfg(feature = "python")]
+pub fn target_score(unit: &CombatUnit, has_ground: bool, has_air: bool) -> f32 {
+    let mut score: f32 = 0.0;
+    let cost: f32 = unit.get_adjusted_cost() as f32;
 
+    let air_dps: f32 = unit.get_dps(true);
+    let ground_dps: f32 = unit.get_dps(false);
+
+    score += 0.01 * cost;
+
+    score += 1000.00 * unit.get_max_dps();
+
+    if !has_air && ground_dps == 0.0 || !has_ground && air_dps == 0.0 {
+        score *= 0.01;
+    }
+    score
+}
+
+pub fn time_to_be_able_to_attack(unit: &CombatUnit, distance_to_enemy: f32) -> f32 {
+    if unit.movement_speed > 0.0 {
+        if distance_to_enemy - unit.get_max_range() > 0.0 {
+            (distance_to_enemy - unit.get_max_range()) / unit.movement_speed
+        } else {
+            0.0
+        }
+    } else {
+        10000.0
+    }
+}
+
+#[cfg(feature = "python")]
 pub fn time_to_be_able_to_attack(unit: &CombatUnit, distance_to_enemy: f32) -> f32 {
     if unit.movement_speed > 0.0 {
         if distance_to_enemy - unit.get_max_range() > 0.0 {

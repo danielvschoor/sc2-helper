@@ -6,7 +6,7 @@ import generation_data as gd
 def make_key(key):
     if key[0].isdigit():
         key = "_" + key
-    return key.upper().replace(" ", "_")
+    return key.upper().replace(" ", "_").replace("@","")
 
 
 def parse_simple(d, data):
@@ -50,13 +50,13 @@ def parse_data(data):
             else:
                 exit(f"Not mapped: {v !r}")
 
-        key = key.upper().replace(" ", "_")
+        key = key.upper().replace(" ", "_").replace('@', '')
 
         if "name" in v:
             key = f'{v["name"].upper().replace(" ", "_")}_{key}'
 
         if "friendlyname" in v:
-            key = v["friendlyname"].upper().replace(" ", "_")
+            key = v["friendlyname"].upper().replace(" ", "_").replace('@', '')
 
         if key[0].isdigit():
             key = "_" + key
@@ -101,7 +101,7 @@ def generate(file=r"C:\Users\danie\Documents\StarCraft II\stableid.json"):
 
 def main():
     generate()
-    shutil.move('src/generated_enums.rs', "rust_lib/src/generated_enums.rs")
+    # shutil.move('src/generated_enums.rs', "/src/generated_enums.rs")
 
 
 if __name__ == "__main__":

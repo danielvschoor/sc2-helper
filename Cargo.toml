@@ -7,22 +7,24 @@ edition = "2018"
 
 [lib]
 name = "sc2_helper"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-enum-primitive-derive = "^0.2"
-num-traits = "^0.2"
+enum-primitive-derive = {version="~0.2"}
+num-traits = {version="0.2.12"}
 rand = "0.7.2"
 lazy_static = "*"
 #rayon ="*"
 serde = { version = "1.0", features = ["derive"] }
 #rustc-hash = "1.0.1"
 #serde_json ="*"
+rust-sc2 = { git="https://github.com/danielvschoor/rust-sc2.git", branch="cost", features=["rayon", "serde"]}
 
 
 [dependencies.pyo3]
 version = "0.11.0"
 features = ["extension-module"]
+optional=true
 
 [profile.release]
 opt-level = 3
@@ -30,6 +32,9 @@ debug=false
 panic="abort"
 lto = "fat"
 codegen-units = 1
+
+[features]
+python = ["pyo3"]
 
 
 

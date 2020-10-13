@@ -3,17 +3,18 @@ extern crate lazy_static;
 #[macro_use]
 extern crate enum_primitive_derive;
 extern crate num_traits;
-// use num_traits::FromPrimitive;
 
 pub mod combat_predictor;
 pub mod combat_unit;
-mod enums;
-pub mod generated_enums;
-mod unit_type_data;
+
+pub mod unit_type_data;
 pub mod weapon;
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
+#[cfg(feature = "python")]
 use pyo3::wrap_pyfunction;
 
+#[allow(unused_macros)]
 macro_rules! max {
     ($x: expr) => ($x);
     ($x: expr, $($z: expr),+) => {{
@@ -25,6 +26,8 @@ macro_rules! max {
         }
     }}
 }
+
+#[allow(unused_macros)]
 macro_rules! min {
     ($x: expr) => ($x);
     ($x: expr, $($z: expr),+) => {{
@@ -37,6 +40,7 @@ macro_rules! min {
     }}
 }
 
+#[cfg(feature = "python")]
 #[pyfunction]
 pub fn circles_intersect(pos1: (f64, f64), pos2: (f64, f64), r1: f64, r2: f64) -> bool {
     let x1 = pos1.0;
@@ -52,7 +56,7 @@ pub fn circles_intersect(pos1: (f64, f64), pos2: (f64, f64), r1: f64, r2: f64) -
         !(dist_sq > rad_sum_sq)
     }
 }
-
+#[cfg(feature = "python")]
 #[pyfunction]
 pub fn in_circle(position: (f64, f64), tile: (usize, usize), radius: f64) -> bool {
     let dx = position.0 - tile.0 as f64;
@@ -60,7 +64,7 @@ pub fn in_circle(position: (f64, f64), tile: (usize, usize), radius: f64) -> boo
 
     ((dx * dx + dy * dy) as f64) < radius * radius
 }
-
+#[cfg(feature = "python")]
 #[pyfunction]
 fn find_points_inside_circle(
     position: (f64, f64),
@@ -82,7 +86,7 @@ fn find_points_inside_circle(
     }
     points_in_circle
 }
-
+#[cfg(feature = "python")]
 #[pymodule]
 fn sc2_helper(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<combat_predictor::CombatPredictor>()?;
@@ -96,12 +100,12 @@ fn sc2_helper(_py: Python, m: &PyModule) -> PyResult<()> {
 mod tests {
     use super::*;
 
+    use crate::combat_unit::CombatUnit;
     use combat_predictor::{CombatPredictor, CombatSettings};
-    use enums::Attribute;
-    use generated_enums::UnitTypeId;
+    use rust_sc2::game_data::Attribute;
+    use rust_sc2::prelude::UnitTypeId;
     use unit_type_data::{Cost, UnitTypeData};
     use weapon::{Weapon, WeaponTargetType};
-    use crate::combat_unit::CombatUnit;
 
     #[test]
     fn test_combat_predictor() {
@@ -109,9 +113,9 @@ mod tests {
         combat_settings.debug = true;
         let mut predictor = CombatPredictor::new();
         let marine = CombatUnit {
-            type_id: UnitTypeId::MARINE,
+            type_id: UnitTypeId::Marine,
             type_data: UnitTypeData::new(
-                vec![Attribute::LIGHT, Attribute::BIOLOGICAL],
+                vec![Attribute::Light, Attribute::Biological],
                 Cost {
                     minerals: 50,
                     vespene: 0,
@@ -153,9 +157,9 @@ mod tests {
             shield_upgrade_level: 0,
         };
         let zergling: CombatUnit = CombatUnit {
-            type_id: UnitTypeId::ZERGLING,
+            type_id: UnitTypeId::Zergling,
             type_data: UnitTypeData::new(
-                vec![Attribute::LIGHT, Attribute::BIOLOGICAL],
+                vec![Attribute::Light, Attribute::Biological],
                 Cost {
                     minerals: 25,
                     vespene: 0,
@@ -197,12 +201,12 @@ mod tests {
             shield_upgrade_level: 0,
         };
         let battlecruiser: CombatUnit = CombatUnit {
-            type_id: UnitTypeId::BATTLECRUISER,
+            type_id: UnitTypeId::Battlecruiser,
             type_data: UnitTypeData::new(
                 vec![
-                    Attribute::ARMORED,
-                    Attribute::MECHANICAL,
-                    Attribute::MASSIVE,
+                    Attribute::Armored,
+                    Attribute::Mechanical,
+                    Attribute::Massive,
                 ],
                 Cost {
                     minerals: 400,
@@ -245,9 +249,7 @@ mod tests {
         for _ in 0..1 {
             units1.push(battlecruiser.clone());
         }
-        let result = predictor
-            .predict_engage(units1, units2, 1, &combat_settings)
-            .unwrap();
-        assert!(result.0 == 2u32);
+        let result = predictor.predict_engage(units1, units2, 1, &combat_settings);
+        assert_eq!(result.0, 2u32);
     }
 }
