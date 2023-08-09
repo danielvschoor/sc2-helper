@@ -1,8 +1,9 @@
-name: Rust
+name: PyPi Release
 
 on:
-  push:
-    branches: [ master ]
+  release:
+    types:
+      - created
 
 env:
   CARGO_TERM_COLOR: always
