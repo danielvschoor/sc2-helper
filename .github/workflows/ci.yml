@@ -55,8 +55,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ build ]
     steps:
-      - uses: actions/checkout@master
-
       - uses: actions/download-artifact@v3
         with:
           name: wheel-windows-latest
@@ -72,8 +70,5 @@ jobs:
           name: wheel-ubuntu-latest
           path: dist
 
-      - name: Print out the contents of dist
-        run: ls -la dist
-
-#      - name: Publish package distributions to PyPI
-#        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
