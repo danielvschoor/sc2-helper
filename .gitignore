@@ -6,3 +6,4 @@ target
 src/map_analyzer
 venv/
 *.so
+Cargo.lock

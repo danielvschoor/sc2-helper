@@ -1,6 +1,6 @@
 use crate::num_traits::{FromPrimitive, ToPrimitive};
 use pyo3::types::PyAny;
-use pyo3::{FromPy, FromPyObject, IntoPy, PyObject, PyResult, Python, ToPyObject};
+use pyo3::{FromPyObject, IntoPy, PyObject, PyResult, Python, ToPyObject};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -1289,10 +1289,9 @@ impl ToPyObject for AbilityId {
         self.to_i32().unwrap().to_object(py)
     }
 }
-impl FromPy<AbilityId> for PyObject {
-    fn from_py(other: AbilityId, py: Python) -> Self {
-        let _other: i32 = other.to_i32().unwrap();
-        _other.into_py(py)
+impl IntoPy<PyObject> for AbilityId{
+    fn into_py(self, py: Python) -> PyObject {
+        self.to_i32().unwrap().into_py(py)
     }
 }
 impl<'source> FromPyObject<'source> for AbilityId {
@@ -3316,10 +3315,9 @@ impl ToPyObject for UnitTypeId {
         self.to_i32().unwrap().to_object(py)
     }
 }
-impl FromPy<UnitTypeId> for PyObject {
-    fn from_py(other: UnitTypeId, py: Python) -> Self {
-        let _other: i32 = other.to_i32().unwrap();
-        _other.into_py(py)
+impl IntoPy<PyObject> for UnitTypeId{
+    fn into_py(self, py: Python) -> PyObject {
+        self.to_i32().unwrap().into_py(py)
     }
 }
 impl<'source> FromPyObject<'source> for UnitTypeId {
@@ -3649,10 +3647,9 @@ impl ToPyObject for BuffId {
         self.to_i32().unwrap().to_object(py)
     }
 }
-impl FromPy<BuffId> for PyObject {
-    fn from_py(other: BuffId, py: Python) -> Self {
-        let _other: i32 = other.to_i32().unwrap();
-        _other.into_py(py)
+impl IntoPy<PyObject> for BuffId{
+    fn into_py(self, py: Python) -> PyObject {
+        self.to_i32().unwrap().into_py(py)
     }
 }
 impl<'source> FromPyObject<'source> for BuffId {
@@ -3698,10 +3695,9 @@ impl ToPyObject for EffectId {
         self.to_i32().unwrap().to_object(py)
     }
 }
-impl FromPy<EffectId> for PyObject {
-    fn from_py(other: EffectId, py: Python) -> Self {
-        let _other: i32 = other.to_i32().unwrap();
-        _other.into_py(py)
+impl IntoPy<PyObject> for EffectId{
+    fn into_py(self, py: Python) -> PyObject {
+        self.to_i32().unwrap().into_py(py)
     }
 }
 impl<'source> FromPyObject<'source> for EffectId {
@@ -4036,10 +4032,9 @@ impl ToPyObject for UpgradeId {
         self.to_i32().unwrap().to_object(py)
     }
 }
-impl FromPy<UpgradeId> for PyObject {
-    fn from_py(other: UpgradeId, py: Python) -> Self {
-        let _other: i32 = other.to_i32().unwrap();
-        _other.into_py(py)
+impl IntoPy<PyObject> for UpgradeId{
+    fn into_py(self, py: Python) -> PyObject {
+        self.to_i32().unwrap().into_py(py)
     }
 }
 impl<'source> FromPyObject<'source> for UpgradeId {
