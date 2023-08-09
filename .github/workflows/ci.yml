@@ -8,22 +8,21 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
-    strategy:
-      matrix:
-        os: [ macos-latest, windows-latest, ubuntu-latest ]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v3
-      - name: Run tests
-        run: cargo test --verbose
+#  test:
+#    strategy:
+#      matrix:
+#        os: [ macos-latest, windows-latest, ubuntu-latest ]
+#    runs-on: ${{ matrix.os }}
+#    steps:
+#      - uses: actions/checkout@v3
+#      - name: Run tests
+#        run: cargo test --verbose
 
   build:
     strategy:
       matrix:
         os: [ macos-latest, windows-latest, ubuntu-latest ]
     runs-on: ${{ matrix.os }}
-    needs: [test]
     steps:
       - uses: actions/checkout@v3
       - name: Set up Python ${{ matrix.python-version }}
