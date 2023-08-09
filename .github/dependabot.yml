@@ -1,0 +1,15 @@
+version: 2
+updates:
+- package-ecosystem: cargo
+  directory: "/"
+  schedule:
+    interval: daily
+  open-pull-requests-limit: 10
+  ignore:
+  - dependency-name: serde
+    versions:
+    - 1.0.123
+    - 1.0.124
+  - dependency-name: pyo3
+    versions:
+    - 0.13.1
