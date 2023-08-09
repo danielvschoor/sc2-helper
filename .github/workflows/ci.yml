@@ -56,6 +56,7 @@ jobs:
 
       - name: Copy all wheel files into dist/
         run: |
+          mkdir dist
           find wheel-artifacts -name '*.whl' -exec cp -prv '{}' 'dist/' ';'
 
       - name: Publish package distributions to PyPI
