@@ -1,6 +1,9 @@
-use crate::enums::Attribute;
+use rust_sc2::game_data::Attribute;
+#[cfg(feature="python")]
 use pyo3::{FromPyObject, PyAny, PyResult, Python, ToPyObject};
 use serde::{Deserialize, Serialize};
+
+use rust_sc2::unit::Unit;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Copy)]
 pub struct Cost {
@@ -8,7 +11,7 @@ pub struct Cost {
     pub vespene: i32,
     pub time: f32,
 }
-
+#[cfg(feature="python")]
 impl<'source> FromPyObject<'source> for Cost {
     fn extract(ob: &'source PyAny) -> PyResult<Self> {
         //        println!("{:?}", "Extracting DamageBonus");
@@ -24,7 +27,7 @@ impl<'source> FromPyObject<'source> for Cost {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct UnitTypeData {
     // pub id: UnitTypeId,
     // pub name: String,
@@ -36,6 +39,7 @@ impl UnitTypeData {
         Self { attributes, cost }
     }
 }
+#[cfg(feature="python")]
 impl<'source> FromPyObject<'source> for UnitTypeData {
     fn extract(ob: &'source PyAny) -> PyResult<Self> {
         //        println!("{:?}", "Extracting DamageBonus");
@@ -48,6 +52,20 @@ impl<'source> FromPyObject<'source> for UnitTypeData {
                 attributes: obj.getattr(py, "attributes")?.extract(py)?,
                 cost: obj.getattr(py, "cost")?.extract(py)?,
             })
+        }
+    }
+}
+
+impl From<&Unit> for UnitTypeData{
+    fn from(unit: &Unit) -> Self {
+        
+        Self{
+            attributes: unit.attributes().to_vec(),
+            cost: Cost {
+                minerals: unit.cost().minerals as i32,
+                vespene: unit.cost().vespene as i32,
+                time: unit.cost().minerals as f32
+            }
         }
     }
 }

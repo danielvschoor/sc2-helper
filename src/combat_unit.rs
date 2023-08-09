@@ -1,12 +1,17 @@
-use crate::generated_enums::{UnitTypeId, UpgradeId};
+use rust_sc2::prelude::{UnitTypeId, UpgradeId};
 // use crate::num_traits::FromPrimitive;
 use crate::unit_type_data::UnitTypeData;
 use crate::weapon::{Weapon, WeaponTargetType};
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
+#[cfg(feature = "python")]
 use pyo3::types::PyAny;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Mutex;
+
+use rust_sc2::prelude::Unit;
+
 lazy_static! {
     pub static ref UNIT_CACHE: Mutex<HashMap<UnitTypeId, CombatUnit>> =
         Mutex::new(HashMap::with_capacity(100));
@@ -15,43 +20,43 @@ lazy_static! {
 const VESPENE_MULTIPLIER: f32 = 1.5;
 lazy_static! {
     pub static ref IS_MELEE: HashSet<UnitTypeId> = [
-        UnitTypeId::PROBE,
-        UnitTypeId::ZEALOT,
-        UnitTypeId::DARKTEMPLAR,
+        UnitTypeId::Probe,
+        UnitTypeId::Zealot,
+        UnitTypeId::DarkTemplar,
         UnitTypeId::SCV,
-        UnitTypeId::HELLIONTANK,
-        UnitTypeId::DRONE,
-        UnitTypeId::ZERGLING,
-        UnitTypeId::ZERGLINGBURROWED,
-        UnitTypeId::BANELING,
-        UnitTypeId::BANELINGBURROWED,
-        UnitTypeId::ULTRALISK,
-        UnitTypeId::BROODLING
+        UnitTypeId::HellionTank,
+        UnitTypeId::Drone,
+        UnitTypeId::Zergling,
+        UnitTypeId::ZerglingBurrowed,
+        UnitTypeId::Baneling,
+        UnitTypeId::BanelingBurrowed,
+        UnitTypeId::Ultralisk,
+        UnitTypeId::Broodling
     ]
     .iter()
     .cloned()
     .collect();
     pub static ref IS_BASIC_HARVESTER: HashSet<UnitTypeId> =
-        [UnitTypeId::SCV, UnitTypeId::PROBE, UnitTypeId::DRONE]
+        [UnitTypeId::SCV, UnitTypeId::Probe, UnitTypeId::Drone]
             .iter()
             .cloned()
             .collect();
     pub static ref IS_UPGRADE_WITH_LEVELS: HashSet<UpgradeId> = [
-        UpgradeId::TERRANINFANTRYWEAPONSLEVEL1,
-        UpgradeId::TERRANINFANTRYARMORSLEVEL1,
-        UpgradeId::TERRANVEHICLEWEAPONSLEVEL1,
-        UpgradeId::TERRANSHIPWEAPONSLEVEL1,
-        UpgradeId::PROTOSSGROUNDWEAPONSLEVEL1,
-        UpgradeId::PROTOSSGROUNDARMORSLEVEL1,
-        UpgradeId::PROTOSSSHIELDSLEVEL1,
-        UpgradeId::ZERGMELEEWEAPONSLEVEL1,
-        UpgradeId::ZERGGROUNDARMORSLEVEL1,
-        UpgradeId::ZERGMISSILEWEAPONSLEVEL1,
-        UpgradeId::ZERGFLYERWEAPONSLEVEL1,
-        UpgradeId::ZERGFLYERARMORSLEVEL1,
-        UpgradeId::PROTOSSAIRWEAPONSLEVEL1,
-        UpgradeId::PROTOSSAIRARMORSLEVEL1,
-        UpgradeId::TERRANVEHICLEANDSHIPARMORSLEVEL1
+        UpgradeId::TerranInfantryWeaponsLevel1,
+        UpgradeId::TerranInfantryArmorsLevel1,
+        UpgradeId::TerranVehicleWeaponsLevel1,
+        UpgradeId::TerranShipWeaponsLevel1,
+        UpgradeId::ProtossGroundWeaponsLevel1,
+        UpgradeId::ProtossGroundArmorsLevel1,
+        UpgradeId::ProtossShieldsLevel1,
+        UpgradeId::ZergMeleeWeaponsLevel1,
+        UpgradeId::ZergGroundArmorsLevel1,
+        UpgradeId::ZergMissileWeaponsLevel1,
+        UpgradeId::ZergFlyerWeaponsLevel1,
+        UpgradeId::ZergFlyerArmorsLevel1,
+        UpgradeId::ProtossAirWeaponsLevel1,
+        UpgradeId::ProtossAirArmorsLevel1,
+        UpgradeId::TerranVehicleAndShipArmorsLevel1
     ]
     .iter()
     .cloned()
@@ -124,6 +129,7 @@ pub struct CombatUnit {
     // pub weapon_cooldown: f32,
     pub buff_timer: f32,
 }
+#[cfg(feature = "python")]
 impl<'source> FromPyObject<'source> for CombatUnit {
     fn extract(obj: &'source PyAny) -> PyResult<Self> {
         let type_id: UnitTypeId = obj.getattr("type_id")?.extract()?;
@@ -236,7 +242,7 @@ impl CombatUnit {
         }
     }
     pub fn can_be_attacked_by_air(&self) -> bool {
-        self.is_flying || self.type_id == UnitTypeId::COLOSSUS
+        self.is_flying || self.type_id == UnitTypeId::Colossus
     }
     pub fn is_basic_harvester(&self) -> bool {
         IS_BASIC_HARVESTER.contains(&self.type_id)
@@ -291,7 +297,7 @@ impl CombatUnit {
         }
     }
     pub fn can_attack_ground(&self) -> bool {
-        if self.type_id == UnitTypeId::ORACLE {
+        if self.type_id == UnitTypeId::Oracle {
             true
         } else if let Some(weapons) = &self.weapons {
             weapons.iter().any(|x| TARGET_GROUND.contains(&x.w_type))
@@ -340,5 +346,40 @@ impl CombatUnit {
             }
         }
         None
+    }
+}
+
+impl From<&Unit> for CombatUnit {
+    fn from(unit: &Unit) -> Self {
+        CombatUnit {
+            type_id: unit.type_id,
+            type_data: UnitTypeData::from(unit),
+            name: String::new(),
+            is_light: unit.is_light(),
+            is_armored: unit.is_armored(),
+            is_biological: unit.is_biological(),
+            is_mechanical: unit.is_mechanical(),
+            is_massive: unit.is_massive(),
+            is_psionic: unit.is_psionic(),
+            weapons: None, //TODO: Waiting on rust-sc2 to expose weapon data
+            ground_dps: unit.ground_dps(),
+            ground_range: unit.ground_range(),
+            air_dps: unit.air_dps(),
+            air_range: unit.air_range(),
+            armor: unit.armor() as f32,
+            movement_speed: unit.speed(),
+            health: unit.health.unwrap() as f32,
+            health_max: unit.health_max.unwrap() as f32,
+            shield: unit.shield.unwrap() as f32,
+            shield_max: unit.shield.unwrap() as f32,
+            energy: unit.energy.unwrap() as f32,
+            energy_max: unit.energy_max.unwrap() as f32,
+            radius: unit.radius,
+            is_flying: unit.is_flying,
+            attack_upgrade_level: unit.attack_upgrade_level as i64,
+            armor_upgrade_level: unit.armor_upgrade_level as i64,
+            shield_upgrade_level: unit.shield_upgrade_level as i64,
+            buff_timer: 0.0,
+        }
     }
 }

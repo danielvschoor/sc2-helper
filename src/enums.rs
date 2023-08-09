@@ -1,4 +1,4 @@
-use crate::num_traits::{FromPrimitive, ToPrimitive};
+#[cfg(feature = "python")]
 use pyo3::{FromPyObject, PyAny, PyObject, PyResult, Python, ToPyObject};
 use serde::{Deserialize, Serialize};
 
@@ -24,13 +24,13 @@ impl Default for Attribute {
         Attribute::NULL
     }
 }
-
+#[cfg(feature = "python")]
 impl ToPyObject for Attribute {
     fn to_object(&self, py: Python) -> PyObject {
         self.to_i32().unwrap().to_object(py)
     }
 }
-
+#[cfg(feature = "python")]
 impl<'source> FromPyObject<'source> for Attribute {
     fn extract(ob: &'source PyAny) -> PyResult<Self> {
         let ob1: i32 = ob.extract::<i32>().unwrap();
