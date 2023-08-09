@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::combat_unit::CombatUnit;
 use crate::enums::Attribute;
 use crate::generated_enums::UnitTypeId;
-use pyo3::{FromPy, FromPyObject, IntoPy, PyAny, PyObject, PyResult, Python, ToPyObject};
+use pyo3::{FromPyObject, IntoPy, PyAny, PyObject, PyResult, Python, ToPyObject};
 use std::f32::EPSILON;
 
 #[allow(missing_docs)]
@@ -27,10 +27,9 @@ impl ToPyObject for WeaponTargetType {
     }
 }
 
-impl FromPy<WeaponTargetType> for PyObject {
-    fn from_py(other: WeaponTargetType, py: Python) -> Self {
-        let _other: i32 = other.to_i32().unwrap();
-        _other.into_py(py)
+impl IntoPy<PyObject> for WeaponTargetType{
+    fn into_py(self, py: Python) -> PyObject {
+        self.to_i32().unwrap().into_py(py)
     }
 }
 
