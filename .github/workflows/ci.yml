@@ -34,7 +34,7 @@ jobs:
         run: source sc2_helper_env/bin/activate
 
       - name: Build the wheel
-        run: maturin build
+        run: maturin build --release
 
       - name: Upload the wheel artifact
         uses: actions/upload-artifact@v3
