@@ -2,7 +2,7 @@
 name = "sc2_helper"
 version = "0.2.0"
 authors = []
-edition = "2023"
+edition = "2018"
 
 [lib]
 name = "sc2_helper"
